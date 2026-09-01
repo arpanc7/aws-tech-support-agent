@@ -20,7 +20,8 @@ Updated: 2026-09-01. The user authorized the local demo, LangChain4j integration
 - Added the official `What is Amazon EC2?` concepts page and atomically published a 121-document/1,338-passage generation. All 121 sources completed; compatible prior embedding checkpoints were reused.
 - Added unit regressions for inferred, explicit, and multi-service scope plus the exact no-filter EC2 real-model smoke case. Unit/policy/security/architecture/model-contract/local-metrics tests: **48 passed**; PostgreSQL integration tests: **6 passed**; total: **54**, none skipped.
 - Real-model smoke: **9/9 passed**. The EC2 definition returned `ANSWERED` in 24.016 seconds and cited the locally stored `What is Amazon EC2?` overview. Other cache-miss answers took 17.044–31.051 seconds in this run; the exact cache hit took 8 ms. These observations miss the proposed warm-latency target and are not p95 measurements. Results: `.cache/bounded-agent/smoke-report-ec2-fix.json`.
-- The in-app browser reloaded the updated corpus counts and submitted “What is EC2?” with **All supported services** selected. It rendered the grounded definition and inspectable AWS citations from generation `26b148e5`, with an exact validated cache hit on the browser request.
+- The in-app browser reloaded the updated corpus counts and submitted “What is EC2?” with **All supported services** selected. It rendered the grounded definition and inspectable AWS citations from generation `26b148e5`. After the final patched-process restart, an uncached browser request completed with evidence checked in 11.0 seconds.
+- GitHub reported a moderate jsoup cleaner advisory after the push. The direct dependency was updated from 1.21.2 to the first patched version, 1.23.1, and the full verification suite was rerun.
 
 ## Bounded Agentic RAG verification (2026-08-31)
 
