@@ -95,6 +95,7 @@ The same absolute **Deadline** flows through embedding, retrieval, all three Qwe
 - SEARCH_MORE requires one to three distinct nonblank queries.
 - Each query is normalized and capped at 1,000 characters.
 - An optional service must be in the supported-service allowlist. A user's explicit service filter overrides it.
+- Before initial retrieval, `AnswerQuestion.retrievalService` uses the explicit filter or infers a scope only when the current question names exactly one supported service. It does not infer from history, and zero or multiple names remain unscoped. The resolved scope also overrides a model-proposed follow-up service.
 
 **AnswerDraft** contains ANSWER or UNAVAILABLE:
 
@@ -121,7 +122,7 @@ Nomic uses /api/embed, truncate=false, and the pinned 768-dimensional profile. M
 
 ## Retrieval and evidence assembly
 
-PostgreSQL returns dense and English lexical rankings from the pinned generation, service filter, and nonrevoked sources. Java combines them with reciprocal-rank fusion and exact identifier matches. It applies the configured cosine floor, removes duplicate text, takes up to six passages, and enforces the 4,500-evidence-token budget. The six-passage cap limits three serial Qwen prompt costs while still permitting one distinct source per maximum answer claim.
+PostgreSQL returns dense and English lexical rankings from the pinned generation, resolved service scope, and nonrevoked sources. Java combines them with reciprocal-rank fusion and exact identifier matches. It applies the configured cosine floor, removes duplicate text, takes up to six passages, and enforces the 4,500-evidence-token budget. The six-passage cap limits three serial Qwen prompt costs while still permitting one distinct source per maximum answer claim.
 
 A similar-query cache contains candidate IDs, never a final semantic answer. The current request still performs a full retrieval and merges it with reusable candidates. Follow-up results are interleaved with initial results so one query cannot consume the entire budget. All sources remain in the original pinned generation.
 

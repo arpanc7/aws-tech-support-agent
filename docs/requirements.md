@@ -51,7 +51,7 @@ Initial exclusions: AWS SDK calls or account access, shell execution, autonomous
 | B-01 | Network access for setup/refresh must be separate from the answer path. Once dependencies and models are installed, queries MUST use local resources only. |
 | B-02 | Every published document MUST retain canonical URL, title, service, content hash, fetch time, and corpus generation. Unknown source version/date MUST stay unknown. |
 | B-03 | Ingestion MUST be repeatable and resumable. Failed or incomplete refreshes MUST NOT replace a healthy active corpus. |
-| B-04 | Retrieval MUST combine semantic retrieval with lexical matching for AWS error codes, API names, and identifiers. Explicit service/version filters MUST apply before evidence selection. |
+| B-04 | Retrieval MUST combine semantic retrieval with lexical matching for AWS error codes, API names, and identifiers. Explicit service/version filters MUST apply before evidence selection. When no service filter is selected and the current question names exactly one supported service, Java MUST use that service as the retrieval scope; zero or multiple service names remain unscoped. |
 | B-05 | Evidence sufficiency MUST be assessed before answering. A nearest neighbor, high similarity, valid JSON, or model confidence statement is not proof of support. |
 | B-06 | An answer MUST pass output-schema, source-integrity, and evidence-support checks. Missing, contradictory, or uncertain support MUST result in abstention. |
 | B-07 | Unchecked tokens MUST NOT be streamed to the user. Only a validated final response may be displayed or cached. |

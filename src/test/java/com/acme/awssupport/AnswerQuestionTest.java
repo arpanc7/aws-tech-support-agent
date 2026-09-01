@@ -115,6 +115,26 @@ class AnswerQuestionTest {
   }
 
   @Test
+  void infersExplicitServiceWhenFilterIsEmpty() {
+    service.answer(question("What is EC2?"));
+
+    verify(repository).retrieve(any(), eq("What is EC2?"), eq("EC2"), any(), anyList());
+  }
+
+  @Test
+  void keepsMultipleExplicitServicesUnscoped() {
+    assertThat(AnswerQuestion.retrievalService(question("How do EC2 and S3 work together?")))
+        .isEmpty();
+  }
+
+  @Test
+  void explicitFilterOverridesMentionedService() {
+    Question scoped = new Question("Can EC2 use it?", List.of(), new Filters("VPC", "", ""));
+
+    assertThat(AnswerQuestion.retrievalService(scoped)).isEqualTo("VPC");
+  }
+
+  @Test
   void exactHitsAvoidInferenceAndGetNewRequestMetadata() {
     Question q = question("How does explicit deny work?");
     ChatResponse first = service.answer(q);

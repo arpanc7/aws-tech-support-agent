@@ -4,18 +4,18 @@ Baseline 0.4 · 2026-08-31. Implements B-02/B-03/B-04/B-09/B-15/B-16/B-17. The p
 
 ## Corpus scope
 
-The full seed manifest contains 120 distinct official AWS HTML pages. That count is a chosen demo scope, not a guarantee that every service question is answerable. Add curated sources for demonstrated coverage gaps instead of padding the count.
+The full seed manifest contains 121 distinct official AWS HTML pages. That count is a chosen demo scope, not a guarantee that every service question is answerable. The EC2 concepts page was added after the basic “What is EC2?” probe exposed a real coverage gap; add curated sources for demonstrated gaps instead of padding the count.
 
 | Service | Pages | Focus |
 | --- | ---: | --- |
 | IAM | 20 | Policies, roles, trust, access-denied troubleshooting |
 | S3 | 25 | Permissions, ownership, encryption, lifecycle |
-| EC2 | 25 | Connectivity, instance state, keys, EBS |
+| EC2 | 26 | Service overview, connectivity, instance state, keys, EBS |
 | VPC | 20 | Security groups, ACLs, routes, gateways, endpoints |
 | Lambda | 15 | Timeout, concurrency, roles, logs, invocation issues |
 | CloudWatch | 15 | Logs, metrics, alarms, permissions |
 
-`config/sources-small.json` retains the earlier 30-page IAM/S3/EC2 slice; `sources-smoke.json` is a minimal fixture manifest. All entries in a chosen manifest are required. The current full snapshot has 1,330 chunks; the configured 20,000-chunk ceiling is not a target. PDF/OCR, arbitrary uploads and recursive crawling remain excluded.
+`config/sources-small.json` retains the earlier 30-page IAM/S3/EC2 slice; `sources-smoke.json` is a minimal fixture manifest. All entries in a chosen manifest are required. The current full snapshot has 1,338 chunks; the configured 20,000-chunk ceiling is not a target. PDF/OCR, arbitrary uploads and recursive crawling remain excluded.
 
 ## Three representations
 

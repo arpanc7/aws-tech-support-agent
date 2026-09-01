@@ -1,17 +1,26 @@
 # Implementation and verification status
 
-Updated: 2026-08-31. The user authorized the local demo, LangChain4j integration, and bounded Agentic RAG workflow. This is **not a production release approval or a zero-hallucination claim**.
+Updated: 2026-09-01. The user authorized the local demo, LangChain4j integration, and bounded Agentic RAG workflow. This is **not a production release approval or a zero-hallucination claim**.
 
 ## Delivered
 
 - Java 21 / Spring Boot application with domain/port boundaries, PostgreSQL adapters, Flyway migrations, operator commands, health, metrics, and a static chat UI.
 - Native, local-only Ollama: Qwen3 4B Q4_K_M and Nomic Embed Text v1.5. Runtime/model/tokenizer artifacts are pinned. Qwen was observed loading all 37 layers onto Metal.
-- 120 downloaded official pages, six service quotas satisfied, 1,330 embedded passages. Generation: `21fa20b5-5b91-49ae-9c1e-b146dc23c0a0`.
+- 121 downloaded official pages, six service quotas satisfied, 1,338 embedded passages. Generation: `26b148e5-f1d0-4ba6-b147-e7b064eff68b`.
 - HTML snapshots with checksums, structural extraction, tokenizer-based budgets, embedding checkpoints, hybrid exact-vector/lexical/identifier retrieval, atomic publication, rollback and persistent source revocation.
 - Bounded research decisions, one optional local-search round, cited grounded synthesis, an independent grounding pass using the same local model, conservative abstention, no unchecked streaming, and safe text rendering with inspectable exact evidence quotes.
 - Memory-bounded exact/embedding/retrieval caches and semantic candidate reuse with revalidation. Scope/history/profile/generation keys, request coalescing, bounded admission, deadlines and model quarantine on uncertain completion.
 - Opt-in daily refresh with persistent retry backoff, previous-corpus retention on failure, freshness status, snapshot integrity checks, backup tooling and a restore runbook.
 - OpenAPI contract, reproducible setup helpers, Maven wrapper, CI configuration, dependency-update configuration, and a generated CycloneDX SBOM (`target/bom.json` / `target/bom.xml`). An SBOM is an inventory, not a vulnerability assessment.
+
+## EC2 definition regression verification (2026-09-01)
+
+- Reproduced the website returning `CLARIFICATION_REQUIRED` for “What is EC2?” with **All supported services** selected. Initial all-service retrieval lacked a deterministic explicit-service scope, and the manifest omitted the EC2 overview page.
+- `AnswerQuestion` now applies an explicit filter or infers exactly one supported service named in the current question. It does not infer from history; zero or multiple names remain unscoped. The resolved scope also constrains the optional follow-up search.
+- Added the official `What is Amazon EC2?` concepts page and atomically published a 121-document/1,338-passage generation. All 121 sources completed; compatible prior embedding checkpoints were reused.
+- Added unit regressions for inferred, explicit, and multi-service scope plus the exact no-filter EC2 real-model smoke case. Unit/policy/security/architecture/model-contract/local-metrics tests: **48 passed**; PostgreSQL integration tests: **6 passed**; total: **54**, none skipped.
+- Real-model smoke: **9/9 passed**. The EC2 definition returned `ANSWERED` in 24.016 seconds and cited the locally stored `What is Amazon EC2?` overview. Other cache-miss answers took 17.044–31.051 seconds in this run; the exact cache hit took 8 ms. These observations miss the proposed warm-latency target and are not p95 measurements. Results: `.cache/bounded-agent/smoke-report-ec2-fix.json`.
+- The in-app browser reloaded the updated corpus counts and submitted “What is EC2?” with **All supported services** selected. It rendered the grounded definition and inspectable AWS citations from generation `26b148e5`, with an exact validated cache hit on the browser request.
 
 ## Bounded Agentic RAG verification (2026-08-31)
 

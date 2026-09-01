@@ -173,12 +173,13 @@ public class AnswerQuestion {
         .matches(
             "(?is).*\\b(current outage|live status|right now|today.s price|latest price|my account balance)\\b.*"))
       return empty(Answer.unavailable("INSUFFICIENT_EVIDENCE"));
+    String retrievalService = retrievalService(question);
     float[] vector = embeddings(List.of(question.retrievalText()), profile, deadline).getFirst();
     String scope =
         Hashes.sha256(
             generation.id()
                 + profile.answerProfile()
-                + serialize(question.filters())
+                + retrievalService
                 + serialize(question.previousQuestions()));
     List<String> ids = retrieval.getIfPresent(key);
     boolean semanticUsed = false;
@@ -195,23 +196,19 @@ public class AnswerQuestion {
       semanticUsed = !ids.isEmpty();
     }
     List<Evidence> ranked =
-        repository.retrieve(
-            generation, question.retrievalText(), question.filters().service(), vector, ids);
+        repository.retrieve(generation, question.retrievalText(), retrievalService, vector, ids);
     // A semantic hint must not narrow the only retrieval view. Merge it with one full retrieval
     // before any model decision; this adds a cheap database read rather than another Qwen loop.
     if (semanticUsed) {
       List<Evidence> full =
           repository.retrieve(
-              generation,
-              question.retrievalText(),
-              question.filters().service(),
-              vector,
-              List.of());
+              generation, question.retrievalText(), retrievalService, vector, List.of());
       ranked = mergeRankings(List.of(ranked, full));
     }
     List<Evidence> evidence = budget(ranked, question);
     Cached result =
-        researchAndRender(question, generation, profile, evidence, semanticUsed, deadline);
+        researchAndRender(
+            question, generation, profile, retrievalService, evidence, semanticUsed, deadline);
     if (result.answer().status().equals("ANSWERED")) {
       List<String> candidates = ranked.stream().limit(80).map(Evidence::id).toList();
       retrieval.put(key, candidates);
@@ -284,6 +281,7 @@ public class AnswerQuestion {
       Question question,
       Generation generation,
       ModelProfile profile,
+      String retrievalService,
       List<Evidence> evidence,
       boolean semanticUsed,
       Deadline deadline) {
@@ -304,10 +302,7 @@ public class AnswerQuestion {
         rankings.add(evidence);
         for (int i = 0; i < decision.searches().size(); i++) {
           SearchRequest search = decision.searches().get(i);
-          String service =
-              question.filters().service().isEmpty()
-                  ? search.service()
-                  : question.filters().service();
+          String service = retrievalService.isEmpty() ? search.service() : retrievalService;
           rankings.add(
               repository.retrieve(generation, search.query(), service, vectors.get(i), List.of()));
         }
@@ -383,6 +378,29 @@ public class AnswerQuestion {
             && decision.searches().size() <= 3
             && decision.searches().stream().distinct().count() == decision.searches().size()
         : decision.searches().isEmpty();
+  }
+
+  /**
+   * Uses one explicitly named supported service as the retrieval scope when no filter was selected.
+   * Multiple service names intentionally remain unscoped so cross-service questions keep all
+   * relevant evidence. Only the current question is inspected; history cannot silently constrain a
+   * new topic.
+   */
+  public static String retrievalService(Question question) {
+    if (!question.filters().service().isEmpty()) return question.filters().service();
+    String upper = question.question().toUpperCase(Locale.ROOT);
+    List<String> mentioned =
+        Types.SERVICES.stream()
+            .filter(
+                service ->
+                    java.util.regex.Pattern.compile(
+                            "(?<![A-Z0-9])"
+                                + java.util.regex.Pattern.quote(service)
+                                + "(?![A-Z0-9])")
+                        .matcher(upper)
+                        .find())
+            .toList();
+    return mentioned.size() == 1 ? mentioned.getFirst() : "";
   }
 
   /** Checks draft size and resolves every model-selected ID against supplied evidence. */

@@ -24,7 +24,7 @@ flowchart LR
     Answer --> Browser
 ```
 
-The full seed manifest contains 120 official pages: IAM 20, S3 25, EC2 25, VPC 20, Lambda 15, CloudWatch 15. The reference snapshot has 1,330 passages. Models, downloaded documentation and database files are not bundled with source.
+The full seed manifest contains 121 official pages: IAM 20, S3 25, EC2 26, VPC 20, Lambda 15, CloudWatch 15. The reference snapshot has 1,338 passages. Models, downloaded documentation and database files are not bundled with source.
 
 ## Run on the already provisioned reference machine
 
@@ -80,7 +80,7 @@ The application validates [pinned model/tokenizer identities](config/models.lock
 
 ## Bounded agent workflow and grounding
 
-On an uncached request, Java embeds the question and runs local hybrid retrieval. Qwen then chooses one of four actions: answer, request one additional local search round, ask for clarification, or abstain. A search decision contains at most three queries; Java batches their embeddings, executes only the existing PostgreSQL retrieval operation, merges the evidence, and never asks the planner again.
+On an uncached request, Java resolves the retrieval scope, embeds the question, and runs local hybrid retrieval. An explicit service filter wins; with no filter, exactly one supported service named in the current question is inferred, while zero or multiple names remain unscoped. Qwen then chooses one of four actions: answer, request one additional local search round, ask for clarification, or abstain. A search decision contains at most three queries; Java batches their embeddings, executes only the existing PostgreSQL retrieval operation, merges the evidence, and never asks the planner again.
 
 Qwen drafts up to six concise claims linked to temporary evidence aliases. Java rejects unknown or uncited aliases, then a separate Qwen stage reviews the complete draft against only the cited passages. Java rechecks active source state and builds all citation IDs and URLs. The UI displays the synthesized claims and the exact stored evidence separately.
 
