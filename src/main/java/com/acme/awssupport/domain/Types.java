@@ -11,7 +11,7 @@ import java.util.UUID;
  *
  * <p>Nested records keep source provenance and corpus/model identity explicit across boundaries.
  * Request constructors enforce basic input limits; model selections still require application-level
- * validation before they can become cited answers.
+ * validation before they can drive retrieval or become cited answers.
  */
 public final class Types {
   private Types() {}
@@ -20,7 +20,7 @@ public final class Types {
       Set.of("IAM", "S3", "EC2", "VPC", "LAMBDA", "CLOUDWATCH");
   public static final String UNAVAILABLE =
       "Information is not available in the local documentation.";
-  public static final String POLICY_VERSION = "extractive-v5:retrieval-v2";
+  public static final String POLICY_VERSION = "bounded-agent-v1:grounded-synthesis-v1:retrieval-v3";
 
   /**
    * Restricts retrieval scope; null fields become empty strings and service names become uppercase.
@@ -178,10 +178,44 @@ public final class Types {
     }
   }
 
-  /** An untrusted model decision; IDs must be validated against supplied evidence before use. */
-  public record Selection(String decision, List<String> evidenceIds) {}
+  /** One bounded model-proposed local-corpus search; it never represents an executable tool. */
+  public record SearchRequest(String query, String service) {
+    public SearchRequest {
+      query = normalize(query);
+      service = service == null ? "" : service.strip().toUpperCase(java.util.Locale.ROOT);
+      if (query.isEmpty()
+          || query.length() > 1000
+          || (!service.isEmpty() && !SERVICES.contains(service))) {
+        throw new IllegalArgumentException("Invalid model-proposed documentation search");
+      }
+    }
+  }
 
-  /** An answer excerpt copied from stored evidence and linked to server-created citations. */
+  /** An untrusted decision to answer, clarify, abstain, or run one additional search round. */
+  public record ResearchDecision(String action, List<SearchRequest> searches) {
+    public ResearchDecision {
+      action = action == null ? "" : action;
+      searches = searches == null ? List.of() : List.copyOf(searches);
+    }
+  }
+
+  /** One untrusted synthesized claim and the stored evidence IDs it says support the text. */
+  public record DraftClaim(String text, List<String> evidenceIds) {
+    public DraftClaim {
+      text = normalize(text);
+      evidenceIds = evidenceIds == null ? List.of() : List.copyOf(evidenceIds);
+    }
+  }
+
+  /** A bounded model-written answer draft that remains untrusted until application validation. */
+  public record AnswerDraft(String decision, List<DraftClaim> claims) {
+    public AnswerDraft {
+      decision = decision == null ? "" : decision;
+      claims = claims == null ? List.of() : List.copyOf(claims);
+    }
+  }
+
+  /** A validated answer claim linked to server-created citations. */
   public record Claim(String id, String text, List<String> citationIds) {}
 
   /** Server-built attribution tying an answer excerpt to a stored passage and its source URL. */

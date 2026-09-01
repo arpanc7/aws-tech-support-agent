@@ -1,6 +1,6 @@
 # AWS Tech Support Agent
 
-A local Java RAG application that answers AWS questions using downloaded documentation and cited excerpts. No AWS credentials or paid model API are required.
+A local Java Agentic RAG application that answers AWS questions using downloaded documentation, grounded synthesis, and inspectable citations. No AWS credentials or paid model API are required.
 
 **Implemented local demo; production release gates remain pending.** See [verification status](docs/implementation-status.md).
 
@@ -15,12 +15,12 @@ flowchart LR
     Browser[Browser UI] --> Java[Java API + policy + caches]
     Java --> DB[(PostgreSQL + pgvector)]
     Java --> Embed[Nomic query embedding]
-    Java --> Stages[LangChain4j selection and coverage stages]
+    Java --> Stages[LangChain4j research, answer and grounding stages]
     Stages --> Guard[Guarded Ollama ChatModel adapter]
     Guard --> Qwen[Local Qwen]
     Manifest[Approved AWS manifest] --> Ingest[Java ingestion]
     Ingest --> DB
-    Java --> Answer[Stored excerpts + server citations]
+    Java --> Answer[Grounded claims + stored evidence]
     Answer --> Browser
 ```
 
@@ -78,13 +78,15 @@ Start `./scripts/ollama serve` separately, then:
 
 The application validates [pinned model/tokenizer identities](config/models.lock.json). Changed upstream tags require a reviewed profile update, not bypassing validation. Use host-native Ollama for macOS Metal acceleration. Native Windows operational scripts are not supplied; WSL2 is a documented, untested target.
 
-## Prompt chain and grounding
+## Bounded agent workflow and grounding
 
-On the normal uncached path, Java embeds the question, retrieves local passages and asks Qwen to select evidence IDs. Java validates those IDs before a second Qwen coverage check. It renders complete stored excerpts with server-built citations; **model-written AWS prose is never displayed**.
+On an uncached request, Java embeds the question and runs local hybrid retrieval. Qwen then chooses one of four actions: answer, request one additional local search round, ask for clarification, or abstain. A search decision contains at most three queries; Java batches their embeddings, executes only the existing PostgreSQL retrieval operation, merges the evidence, and never asks the planner again.
 
-LangChain4j handles packaged templates and structured model calls through our guarded adapter. We retain explicit policy, deadlines, token parity, inference locks and uncertain-completion quarantine. There are no automatic agents, tools, chat memory, output-repair loops, cloud fallback or query-time web browsing. See [how to add a prompt stage](docs/prompt-chains.md).
+Qwen drafts up to six concise claims linked to temporary evidence aliases. Java rejects unknown or uncited aliases, then a separate Qwen stage reviews the complete draft against only the cited passages. Java rechecks active source state and builds all citation IDs and URLs. The UI displays the synthesized claims and the exact stored evidence separately.
 
-Missing/rejected evidence returns **“Information is not available in the local documentation.”** Clarification and operational errors remain distinct. Similarity, schema validity and the same-model second check do not prove correctness; excerpts can still be irrelevant, incomplete or stale. Synthesized prose remains disabled pending separate evaluation.
+LangChain4j handles packaged templates and structured model calls through our guarded adapter. Java retains explicit stage ordering, call bounds, deadlines, token checks, inference locks, and uncertain-completion quarantine. There are no automatic framework agents, arbitrary tools, chat memory, output-repair loops, recursive research, cloud fallback, or query-time web browsing. See [prompt stages and extension rules](docs/prompt-chains.md).
+
+Missing/rejected evidence returns **“Information is not available in the local documentation.”** Clarification and operational errors remain distinct. Similarity, valid schemas, citations, and a same-model grounding review reduce risk but do not prove correctness; sources can be irrelevant, incomplete, or stale, and generator/reviewer errors can correlate.
 
 Prompt resources are under `src/main/resources/prompts`. Their digest participates in answer-cache identity. Prompt-only changes need a rebuild/restart and evaluation, **not** re-embedding. Changes to the embedding/tokenizer/extraction profile require compatible re-ingestion.
 
@@ -95,7 +97,7 @@ Prompt resources are under `src/main/resources/prompts`. Their digest participat
 | `AwsSupportApplication.main()` | Spring Boot startup |
 | `adapters/inbound/ChatController` | REST entry point: POST `/api/v1/chat` |
 | `application/AnswerQuestion` | Retrieval/cache/validation/rendering policy |
-| `adapters/outbound/EvidencePromptChain`, `PromptStage` | LangChain4j prompt stages |
+| `adapters/outbound/AgenticPromptChain`, `PromptStage` | LangChain4j research, answer and grounding stages |
 | `adapters/outbound/OllamaModel` | Guarded local HTTP transport and ChatModel bridge |
 | `adapters/outbound/PostgresCorpusRepository` | Hybrid retrieval and atomic publication |
 | `src/main/resources/static` | UI HTML, CSS and JavaScript |
@@ -115,7 +117,7 @@ RAG_REFRESH_ENABLED=true ./scripts/run serve
 
 Review manifest changes, validate, then refresh. All entries are required. Snapshots are content-addressed; compatible embedding checkpoints survive failed jobs. Publication is atomic. Unchanged refreshes retain the generation, and failed refreshes retain the previous corpus. Scheduling does not wake a sleeping host. Automatic pruning is not implemented.
 
-Caffeine stores bounded exact answers, embeddings and retrieval candidates. **Similar-query cache hits never directly replay an old answer.** Generation, model/prompt/policy, filters and history scope answer reuse, with authoritative revocation checks before returning results. Caches disappear on restart.
+Caffeine stores bounded exact answers, embeddings and retrieval candidates. **Similar-query cache hits never directly replay an old answer.** Candidate hints are merged with full retrieval for the current question. Generation, model/prompt/policy, filters and history scope answer reuse, with authoritative revocation checks before returning results. Caches disappear on restart.
 
 Native reference-host storage: `.tools/` contains runtimes; `data/models` contains weights; `data/postgres` contains native database files; `data/snapshots` contains HTML. Docker PostgreSQL uses its own named volume instead. Connection defaults are `127.0.0.1:54329`, database/user `aws_support`, password from ignored `.env`.
 
@@ -146,4 +148,4 @@ Tests use isolated schemas without clearing the corpus. Unit tests need no model
 - [Repository guidance for coding agents](AGENTS.md)
 - [Contribution and required-review policy](CONTRIBUTING.md)
 
-Do not expose the local profile to a LAN/internet. It has browser protections, not company identity, tenant isolation, TLS, HA or a completed security audit. Readiness: `/actuator/health/readiness`; metrics: `/actuator/metrics`. Prompts, document bodies and credentials are not logged by default.
+Do not expose the local profile to a LAN/internet. It has browser protections, not company identity, tenant isolation, TLS, HA or a completed security audit. Readiness: `/actuator/health/readiness`; metrics: `/actuator/metrics`. By default, logs and an atomic `rag.*` JSON metrics snapshot are written under `${java.io.tmpdir}/aws-tech-support-agent`; environment variables can override both paths. Prompts, questions, document bodies, and credentials are not logged or exported by default.

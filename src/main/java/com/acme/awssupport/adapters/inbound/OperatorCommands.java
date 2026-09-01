@@ -91,15 +91,19 @@ public class OperatorCommands implements ApplicationRunner {
                   .writeValueAsString(evidence.stream().limit(12).toList()));
           if (args.containsOption("check")) {
             var candidates = evidence.stream().limit(8).toList();
-            var selection = model.select(query, candidates, new Deadline(Duration.ofSeconds(60)));
-            System.out.println(selection);
-            var selected =
-                com.acme.awssupport.application.AnswerQuestion.validateSelection(
-                    selection, candidates);
-            if (!selected.isEmpty())
+            var decision = model.decide(query, candidates, new Deadline(Duration.ofSeconds(60)));
+            System.out.println(decision);
+            if (decision.action().equals("ANSWER")) {
+              var draft = model.answer(query, candidates, new Deadline(Duration.ofSeconds(60)));
+              System.out.println(draft);
+              if (com.acme.awssupport.application.AnswerQuestion.validDraft(draft, candidates))
+                System.out.println(
+                    "grounded="
+                        + model.verify(
+                            query, draft, candidates, new Deadline(Duration.ofSeconds(60))));
+            } else if (decision.action().equals("SEARCH_MORE"))
               System.out.println(
-                  "verified="
-                      + model.verify(query, selected, new Deadline(Duration.ofSeconds(60))));
+                  "Additional searches are shown above; the retrieve diagnostic does not execute the agent round.");
           }
         }
         case "revoke" -> repository.revoke(required(args, "source"));

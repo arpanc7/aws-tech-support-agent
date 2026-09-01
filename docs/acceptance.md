@@ -9,7 +9,7 @@ The following are release criteria, not a claim that every scenario passes. Auto
 | Case | Requirements | Scenario and expected result |
 | --- | --- | --- |
 | A-01 Local operation | R-02–R-05, B-01 | After explicit setup/ingestion, disconnect external networking. Java backend, local embeddings, retrieval, and UI still work; no cloud calls or missing CDN assets. |
-| A-02 Evidence-backed question | R-06, B-04–B-06 | An answerable fixture returns applicable local sources. Every excerpt is an exact stored span; every synthesized claim, if enabled, has complete supporting evidence. |
+| A-02 Evidence-backed question | R-06, B-04–B-06 | An answerable fixture returns applicable local sources. Every synthesized claim cites complete supporting evidence, and every displayed citation quote exactly matches its stored chunk. |
 | A-03 Missing information | R-07, B-05 | Ask about a service absent from the fixture corpus. Return exactly “Information is not available in the local documentation.” No factual filler. |
 | A-04 Missing detail | R-07–R-08, B-05–B-06 | A page mentions the service but lacks the requested limit or remediation. Relevant keywords must not cause an unsupported answer. |
 | A-05 Invalid citation | R-08, B-06 | A stub model fabricates a span ID/URL, cites another generation, or changes quoted text. Reject the candidate. |
@@ -18,7 +18,7 @@ The following are release criteria, not a claim that every scenario passes. Auto
 | A-08 Applicability/ambiguity | B-04, B-08 | Conflicting region/version/service or “what about that one?” without a clear referent prompts clarification; no arbitrary choice. |
 | A-09 Context integrity | B-08–B-09 | Different prior questions with identical current wording do not share an answer-cache key. Prior user assertions cannot become cited facts. |
 | A-10 Exact hot key | R-09, B-09 | Repeat an identical scoped question. Serve the validated cached result without a new model call after checking corpus/policy validity. Concurrent requests coalesce safely. |
-| A-11 Semantic reuse | R-09, B-09 | A paraphrase may reuse candidate source IDs but still checks current question coverage and runs the answer policy. Cache-only similarity never returns a prior final answer. |
+| A-11 Semantic reuse | R-09, B-09 | A paraphrase may reuse candidate source IDs, but they are merged with current full retrieval and the complete answer policy still runs. Cache-only similarity never returns a prior final answer. |
 | A-12 Dangerous similarity | R-08–R-09 | Contrast enable/disable, allow/deny, public/private, S3/S3 Glacier, changed region, changed numbers, and quoted error codes. No unsafe exact match or direct semantic answer replay. |
 | A-13 Refresh consistency | B-02–B-03, B-09 | Query while publishing a new corpus. Each response/citation set uses one pinned generation. New requests use the new generation; old cache namespace is not reused. |
 | A-14 Revocation | B-02, B-06, B-09 | Withdraw a source for security reasons after a cache hit or during generation. The final revocation check prevents its evidence from being served. |
@@ -41,10 +41,12 @@ The following are release criteria, not a claim that every scenario passes. Auto
 | Case | Requirements | Scenario and expected result |
 | --- | --- | --- |
 | L-01 Template boundary | R-10, B-12, B-17 | Template-like and ChatML-like input stays literal data; fixed policy cannot be replaced through variables. |
-| L-02 Stage isolation | R-10, B-06, B-18 | Coverage receives only validated selection, with the original question and a distinct policy; no automatic memory or tools. |
-| L-03 Bounded chain | B-10, B-11, B-18 | Malformed output does not trigger repair calls. Selection/coverage share deadlines, and candidate fallback is bounded to one retry. |
+| L-02 Stage isolation | R-10, B-06, B-18 | Answer receives only budgeted local evidence. Grounding receives only the validated draft and its cited evidence, with the original question and a distinct policy; no automatic memory or tools. |
+| L-03 Bounded chain | B-10–B-11, B-18–B-20 | Malformed output does not trigger repair calls. All stages share one deadline. SEARCH_MORE executes at most once, accepts at most three queries, and cannot choose an operation other than local corpus retrieval. |
 | L-04 Prompt identity | B-09, B-17 | Changed packaged prompt content changes answer identity while leaving the embedding profile compatible. |
 | L-05 Framework boundary | B-14 | Domain/ports have no LangChain4j dependency; actual model calls use the guarded adapter. |
+| L-06 Claim aliases | B-06, B-21 | One through six answer claims cite only supplied aliases; unknown, empty, duplicate, or uncited outputs fail closed. Server IDs and URLs never come from the model. |
+| L-07 Grounding review | B-06, B-21 | The complete draft is accepted only on SUPPORTED. UNSUPPORTED, UNCERTAIN, invalid output, source revocation, or generation mismatch returns no partial AWS answer. |
 | L-06 Wire compatibility | B-15, B-18 | Raw prompt role delimiters, deterministic JSON, schema, options and token parity remain checked after template composition. |
 | L-07 Documentation and platform | R-03, R-11 | High/low-level diagrams match actual classes/schema; setup distinguishes tested platforms from intended targets. Validate native libraries and smoke/performance/offline behavior on each new target before certification. |
 
@@ -73,7 +75,8 @@ Measure retrieval independently from generation. For multi-source cases, score r
 | Metric / invariant | Gate |
 | --- | --- |
 | Citation integrity | 100% of displayed citations resolve to the pinned, non-revoked source spans |
-| Strict excerpt fidelity | 100% verbatim evidence text; zero model-written AWS prose |
+| Grounded claim integrity | 100% of claims have valid active citations; zero observed unsupported claims in the reviewed set |
+| Citation quote fidelity | 100% of citation quotes exactly match stored chunks in the pinned generation |
 | Retrieval evidence recall@8 | At least 90% mean required-evidence recall across answerable held-out questions |
 | Appropriate answer rate | At least 80% of answerable held-out questions answered correctly with necessary qualifications; prevents “always abstain” from passing |
 | Unanswerable handling | At least 95% correct abstention, with zero observed substantive fabricated answers; other outcomes are reviewed and reported |
@@ -103,8 +106,8 @@ CI must run compilation, formatting/static analysis, unit/architecture tests, de
 | M1 — Skeleton | Java module structure, REST contract/OpenAPI, health/config, local dependency setup, initial static UI shell | Build/architecture checks pass; missing dependencies fail clearly |
 | M2 — Corpus | Fetch/extract/chunk/embed pipeline, source snapshots, schema, atomic generation publication | Provenance/resume/rollback and tokenization tests pass on the 30-page IAM/S3/EC2 slice |
 | M3 — Retrieval | Hybrid retrieval, filters, evidence selection, retrieval diagnostics | Retrieval evaluation reaches the agreed gate without generation |
-| M4 — Safe answer | Strict excerpt selection, evidence gates, citation rendering, abstention/error/clarification states | Grounding and adversarial acceptance cases pass |
+| M4 — Safe answer | Bounded research, grounded synthesis, evidence gates, citation rendering, abstention/error/clarification states | Grounding and adversarial acceptance cases pass |
 | M5 — Cache and resilience | Exact answer/embedding/retrieval caches, semantic candidate reuse, admission control, deadlines, incremental refresh scheduler, metrics | Cache separation, concurrency, failure, revocation, and incremental/scheduled refresh cases pass |
-| M6 — Demo release | Completed UI, 120-page six-service corpus, offline walkthrough, restore runbook, measured performance, optional evaluated synthesis mode | Coverage and release gates reviewed; known limitations documented |
+| M6 — Demo release | Completed UI, 120-page six-service corpus, offline walkthrough, restore runbook, measured bounded-agent performance | Coverage and release gates reviewed; known limitations documented |
 
-Each milestone gets a small reviewed change set. Specification changes precede incompatible code changes. Expanding corpus size, enabling synthesized prose, directly reusing semantic answers, or sharing the service beyond localhost requires an explicit decision and updated acceptance coverage.
+Each milestone gets a small reviewed change set. Specification changes precede incompatible code changes. Adding another research loop, arbitrary tools, AWS account access, directly reusing semantic answers, or sharing the service beyond localhost requires an explicit decision and updated acceptance coverage.

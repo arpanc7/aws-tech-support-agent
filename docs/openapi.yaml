@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: Local AWS Tech Support API
-  version: 0.1.0
-  description: Local-only extractive RAG with LangChain4j selection and coverage stages behind a guarded Ollama adapter. All chat responses are buffered until validation completes. The HTTP contract is unchanged.
+  version: 0.2.0
+  description: Local-only bounded Agentic RAG with LangChain4j research, answer, and grounding stages behind a guarded Ollama adapter. All chat responses are buffered until validation completes.
 servers:
   - url: http://127.0.0.1:8080
 paths:
@@ -100,22 +100,22 @@ components:
       properties:
         requestId: {type: string, format: uuid}
         status: {type: string, enum: [ANSWERED, INFORMATION_NOT_AVAILABLE, CLARIFICATION_REQUIRED]}
-        answerMode: {type: string, enum: [EXTRACTIVE_STRICT]}
+        answerMode: {type: string, enum: [GROUNDED_SYNTHESIS]}
         message: {type: string}
         reason: {type: string, nullable: true}
         claims:
           type: array
-          maxItems: 3
+          maxItems: 6
           items:
             type: object
             required: [id, text, citationIds]
             properties:
               id: {type: string}
-              text: {type: string, description: Exact text from a stored evidence chunk}
+              text: {type: string, description: Synthesized claim accepted only after alias validation and grounding review}
               citationIds: {type: array, items: {type: string}}
         citations:
           type: array
-          maxItems: 3
+          maxItems: 6
           items:
             type: object
             required: [id, spanId, documentId, title, sourceUrl, heading, quote, fetchedAt]
@@ -126,7 +126,7 @@ components:
               title: {type: string}
               sourceUrl: {type: string, format: uri}
               heading: {type: string}
-              quote: {type: string}
+              quote: {type: string, description: Exact text from the stored evidence chunk}
               fetchedAt: {type: string, format: date-time}
         corpusGeneration: {type: string, format: uuid}
         snapshotPublishedAt: {type: string, format: date-time}

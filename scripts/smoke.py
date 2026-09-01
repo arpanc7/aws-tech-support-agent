@@ -38,8 +38,12 @@ def main():
             if repeat: passed = passed and result.get('cacheDisposition') == 'EXACT'
             if result.get('status') == 'ANSWERED':
                 citations = {c['id']: c for c in result['citations']}
+                passed = passed and result.get('answerMode') == 'GROUNDED_SYNTHESIS'
                 passed = passed and bool(result['claims']) and all(
-                    c['citationIds'] and all(c['text'] == citations[x]['quote'] for x in c['citationIds']) for c in result['claims'])
+                    c['text'].strip() and c['citationIds'] and all(
+                        x in citations and citations[x]['quote'].strip()
+                        and citations[x]['sourceUrl'].startswith('https://docs.aws.amazon.com/')
+                        for x in c['citationIds']) for c in result['claims'])
             elapsed = round(time.monotonic() - start, 3)
             row = {'id': case['id'] + ('-repeat' if repeat else ''), 'passed': passed, 'elapsedSeconds': elapsed, 'response': result}
             report['results'].append(row)

@@ -13,6 +13,7 @@ import com.acme.awssupport.domain.Types.*;
 import com.acme.awssupport.ports.TokenCounter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -90,7 +91,8 @@ class OllamaContractTest {
             tokens,
             locks,
             jdbc,
-            new com.acme.awssupport.adapters.outbound.EvidencePromptChain(json));
+            new com.acme.awssupport.adapters.outbound.AgenticPromptChain(json),
+            new SimpleMeterRegistry());
   }
 
   @AfterEach
@@ -104,18 +106,7 @@ class OllamaContractTest {
 
   @Test
   void localEvidenceAliasesResolveOnlyToSuppliedStoredIds() throws Exception {
-    Evidence evidence =
-        new Evidence(
-            "stored-sha256",
-            "lambda-timeout",
-            "LAMBDA",
-            "Timeout",
-            "https://docs.aws.amazon.com/lambda/latest/dg/configuration-timeout.html",
-            "Timeout",
-            "",
-            "Maximum timeout is 900 seconds.",
-            java.time.Instant.now(),
-            .9);
+    Evidence evidence = evidence();
     response =
         json.writeValueAsString(
             Map.of(
@@ -124,13 +115,15 @@ class OllamaContractTest {
                 "prompt_eval_count",
                 100,
                 "response",
-                "{\"decision\":\"ANSWERABLE\",\"evidenceIds\":[\"E1\"]}"));
+                "{\"decision\":\"ANSWER\",\"claims\":[{\"text\":\"The maximum is 900 seconds.\",\"evidenceIds\":[\"E1\"]}]}"));
     assertThat(
             model
-                .select(
+                .answer(
                     new Question("Maximum timeout?", List.of(), null),
                     List.of(evidence),
                     deadline())
+                .claims()
+                .getFirst()
                 .evidenceIds())
         .containsExactly("stored-sha256");
     response =
@@ -141,10 +134,10 @@ class OllamaContractTest {
                 "prompt_eval_count",
                 100,
                 "response",
-                "{\"decision\":\"ANSWERABLE\",\"evidenceIds\":[\"E99\"]}"));
+                "{\"decision\":\"ANSWER\",\"claims\":[{\"text\":\"Invented\",\"evidenceIds\":[\"E99\"]}]}"));
     assertThatThrownBy(
             () ->
-                model.select(
+                model.answer(
                     new Question("Maximum timeout?", List.of(), null),
                     List.of(evidence),
                     deadline()))
@@ -183,7 +176,12 @@ class OllamaContractTest {
             Map.of("done", true, "response", "not JSON"))) {
       response = json.writeValueAsString(output);
       assertThatThrownBy(
-              () -> model.verify(new Question("Deny?", List.of(), null), List.of(), deadline()))
+              () ->
+                  model.verify(
+                      new Question("Deny?", List.of(), null),
+                      draft(),
+                      List.of(evidence()),
+                      deadline()))
           .isInstanceOf(SupportException.class);
     }
   }
@@ -196,7 +194,9 @@ class OllamaContractTest {
       response =
           json.writeValueAsString(
               Map.of("done", true, "prompt_eval_count", 100, "response", answer));
-      assertThat(model.verify(new Question("Deny?", List.of(), null), List.of(), deadline()))
+      assertThat(
+              model.verify(
+                  new Question("Deny?", List.of(), null), draft(), List.of(evidence()), deadline()))
           .isFalse();
     }
   }
@@ -207,6 +207,7 @@ class OllamaContractTest {
     assertThatThrownBy(() -> model.embed(List.of("query"), deadline()))
         .isInstanceOfSatisfying(
             SupportException.class, e -> assertThat(e.code()).isEqualTo("MODEL_UNAVAILABLE"));
+    verify(jdbc).update("UPDATE model_health SET healthy=true,reason='' WHERE singleton=true");
   }
 
   @Test
@@ -216,7 +217,7 @@ class OllamaContractTest {
             Map.of(
                 "done", true, "prompt_eval_count", 100, "response", "{\"verdict\":\"SUPPORTED\"}"));
     var question = new Question("Does {{current_date}} change the policy?", List.of(), null);
-    assertThat(model.verify(question, List.of(), deadline())).isTrue();
+    assertThat(model.verify(question, draft(), List.of(evidence()), deadline())).isTrue();
     var body = json.readTree(request);
     assertThat(body.path("raw").asBoolean()).isTrue();
     assertThat(body.path("stream").asBoolean(true)).isFalse();
@@ -227,7 +228,8 @@ class OllamaContractTest {
         .contains("{{current_date}}")
         .startsWith("<|im_start|>system\n")
         .endsWith("</think>\n\n");
-    assertThatThrownBy(() -> model.verify(question, List.of(), new Deadline(Duration.ZERO)))
+    assertThatThrownBy(
+            () -> model.verify(question, draft(), List.of(evidence()), new Deadline(Duration.ZERO)))
         .isInstanceOfSatisfying(
             SupportException.class, e -> assertThat(e.code()).isEqualTo("DEADLINE_EXCEEDED"));
     assertThat(calls.get()).isEqualTo(1);
@@ -239,5 +241,24 @@ class OllamaContractTest {
     assertThatThrownBy(() -> model.embed(List.of("query"), new Deadline(Duration.ofMillis(50))))
         .isInstanceOf(SupportException.class);
     verify(jdbc, atLeastOnce()).update(contains("Inference completion uncertain"));
+  }
+
+  private Evidence evidence() {
+    return new Evidence(
+        "stored-sha256",
+        "lambda-timeout",
+        "LAMBDA",
+        "Timeout",
+        "https://docs.aws.amazon.com/lambda/latest/dg/configuration-timeout.html",
+        "Timeout",
+        "",
+        "Maximum timeout is 900 seconds.",
+        java.time.Instant.now(),
+        .9);
+  }
+
+  private AnswerDraft draft() {
+    return new AnswerDraft(
+        "ANSWER", List.of(new DraftClaim("The maximum is 900 seconds.", List.of("stored-sha256"))));
   }
 }

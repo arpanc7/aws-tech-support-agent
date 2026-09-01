@@ -1,6 +1,6 @@
 # Requirements: AWS Tech Support Agent
 
-Version: 0.3 implementation baseline · Date: 2026-08-31 · LangChain4j integration authorized by user
+Version: 0.4 bounded-agent baseline · Date: 2026-08-31 · Agentic RAG implementation authorized by user
 
 `MUST` denotes a mandatory behavior. `SHOULD` denotes a default that requires a documented reason to change. Limits are starting configurations; authorization to implement is not acceptance of unmeasured quality claims. See [implementation status](implementation-status.md) for completed work and remaining release gates.
 
@@ -23,6 +23,7 @@ Help a user understand or troubleshoot AWS products using information in an expl
 | R-09 | Provide local caching for hot/repeated questions and similar questions without weakening grounding or correctness. |
 | R-10 | Use LangChain4j prompt templates and model APIs for explicit, extensible prompt stages while preserving the application's evidence-validation chain and guarded local transport. |
 | R-11 | Maintain high- and low-level design diagrams, prompt-extension guidance, portable setup instructions, and repository guidance in AGENTS.md. |
+| R-12 | Let the local model decide whether the initial evidence is sufficient or whether one additional local search round is needed, while keeping execution bounds in Java. |
 
 ## 3. Current local scope
 
@@ -38,7 +39,7 @@ These defaults bound the current local implementation. Production expansion requ
 | Hardware | Tested reference: Mac ARM64 with 16 GB unified memory. Portable runtime targets and setup limits are documented in platform-setup.md; reserve at least 10 GB free disk initially. |
 | Runtime | Host Java/Ollama with Docker or native PostgreSQL/pgvector. Reference host uses native PostgreSQL because Docker Desktop failed to start. |
 | Freshness | Manual refresh plus configurable daily incremental refresh while the app is running, online, and idle; source-check and snapshot dates visible; no guarantee of current AWS behavior |
-| Answer policy | Recommend strict source-excerpt mode first; guarded synthesized summaries are a separately evaluated mode |
+| Answer policy | Bounded grounded synthesis: each claim cites active local evidence and the complete draft passes a separate grounding review |
 | Similar queries | Reuse retrieval candidates and revalidate against the current question; do not serve a cached answer solely because vectors are similar |
 
 Initial exclusions: AWS SDK calls or account access, shell execution, autonomous actions, live web search during answering, pricing/current outage guarantees, PDF/OCR ingestion, arbitrary uploads, fine-tuning, multi-tenancy, SSO, Kubernetes, and multi-region availability. Future work must not silently enter this scope.
@@ -65,17 +66,17 @@ Initial exclusions: AWS SDK calls or account access, shell execution, autonomous
 | B-16 | Refresh MUST detect unchanged content, embed only new/changed embedding inputs, and publish changes atomically. Scheduled refresh MUST coalesce missed runs, avoid overlapping jobs, and never fetch from the chat path. |
 | B-17 | Prompt stages MUST use reviewed packaged templates and constrained output schemas. Request/document text MUST remain data, never template source. Template contents MUST participate in answer-cache identity without changing the embedding profile. |
 | B-18 | Additional prompt stages MUST share the existing deadline and inference lock, preserve fail-closed validation, and have explicit call bounds. No implicit memory, tools, cloud fallback, automatic repair/retry loop, or uncited synthesis may be introduced by framework defaults. |
+| B-19 | The research decision MUST be one of answer, search more, clarify, or unavailable. Search-more may contain one to three normalized local-corpus queries and may execute only once per request. |
+| B-20 | Java, not the model or LangChain4j, MUST execute retrieval. Model output cannot select a network destination, SQL, shell command, AWS API, or arbitrary tool. |
+| B-21 | A synthesized answer MUST contain at most six claims. Every claim MUST cite one to three evidence aliases supplied to the model; Java MUST map aliases to active stored chunks and reject unknown or uncited claims. |
 
 ## 5. Grounding contract and its limits
 
 “Prevent hallucinations” is a product objective, not an honest promise of zero error from a generative model. Prompts, low temperature, and a second model check cannot prove a synthesized claim correct.
 
-Two explicit policies are proposed:
+The implemented policy is **GROUNDED_SYNTHESIS**. Qwen first decides whether to answer from initial evidence, run one additional local search, clarify, or abstain. It then drafts individual claims linked to evidence aliases. Java validates every alias and active source, and a separate Qwen stage reviews the complete draft against only its cited passages. Unsupported or uncertain output rejects the whole draft.
 
-- **EXTRACTIVE_STRICT — recommended initial default:** the model selects existing evidence span IDs. The server copies those spans verbatim and uses fixed presentation text. It does not publish model-written AWS claims. This prevents newly invented prose, but a selected excerpt may still be irrelevant, incomplete, outdated, or misleading without surrounding qualifications.
-- **GROUNDED_SYNTHESIS — opt-in after evaluation:** the model drafts individual claims linked to evidence spans. The server checks provenance and uses a separate verification pass for support and applicability. Any uncertain claim rejects the entire draft. This offers more natural answers with residual hallucination risk, including correlated generator/verifier errors.
-
-Both modes must enforce service/version applicability, preserve qualifiers, display sources, and abstain when evidence is insufficient. If literal zero unsupported synthesized statements is mandatory, synthesized mode must remain disabled. Neither mode promises that AWS documentation itself is complete or current.
+This offers a more useful response than displaying raw chunks, with residual hallucination risk: the generator and reviewer use the same model and can make correlated errors. Schema checks, citations, retrieval similarity, and model review do not prove factual correctness. The UI therefore exposes the exact stored evidence behind every citation. The policy must preserve qualifiers, enforce service/version applicability, and abstain when evidence is insufficient. Neither the agent nor the answer stage may use Qwen's outside knowledge.
 
 For this baseline, do not generate partial answers to multi-part questions. If any requested material part is unsupported, abstain and optionally offer separately labeled related sources. This avoids implying completeness.
 
@@ -103,9 +104,9 @@ Resource limits must be enforced even if the target latency cannot be met. Bench
 | --- | --- | --- |
 | O-01 | Reference resource profile and available disk capacity | RAM confirmed as 16 GB. Reserve 10 GB free disk for initial setup; verify available space and measured growth before installation. |
 | O-02 | Local Docker database | Docker confirmed acceptable; PostgreSQL + pgvector remains the recommended database. |
-| O-03 | Must v0.1 use only excerpts, or are guarded generated summaries acceptable? | Ship strict excerpts first, evaluate summaries before enabling them. |
+| O-03 | Must the demo use only excerpts, or are guarded generated summaries acceptable? | User approved bounded grounded synthesis with one optional additional-search round and a grounding review. |
 | O-04 | Seed corpus minimum delegated to us | Selected 120 pages across IAM/S3/EC2/VPC/Lambda/CloudWatch. Use 30 IAM/S3/EC2 pages for the first vertical slice; see [data lifecycle](data-lifecycle.md) for quotas and coverage criteria. |
 | O-05 | Are source-candidate reuse and exact answer caching sufficient for v0.1 similar-query caching? | Yes; defer direct semantic answer reuse until an equivalence/answer-reuse evaluation passes. |
 | O-06 | Is this a trusted single-user demo or immediately shared within the company? | Single-user localhost only; shared deployment requires a separate identity, access-control, and capacity baseline. |
 
-These are review items, not permission to install or implement. This design phase ends with documents only.
+The bounded-agent design is implemented for local evaluation. Production release still requires the acceptance evidence in [acceptance.md](acceptance.md).

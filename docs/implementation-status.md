@@ -1,6 +1,6 @@
 # Implementation and verification status
 
-Updated: 2026-08-31. The user authorized the local demo and LangChain4j integration. This is **not a production release approval or a zero-hallucination claim**.
+Updated: 2026-08-31. The user authorized the local demo, LangChain4j integration, and bounded Agentic RAG workflow. This is **not a production release approval or a zero-hallucination claim**.
 
 ## Delivered
 
@@ -8,15 +8,26 @@ Updated: 2026-08-31. The user authorized the local demo and LangChain4j integrat
 - Native, local-only Ollama: Qwen3 4B Q4_K_M and Nomic Embed Text v1.5. Runtime/model/tokenizer artifacts are pinned. Qwen was observed loading all 37 layers onto Metal.
 - 120 downloaded official pages, six service quotas satisfied, 1,330 embedded passages. Generation: `21fa20b5-5b91-49ae-9c1e-b146dc23c0a0`.
 - HTML snapshots with checksums, structural extraction, tokenizer-based budgets, embedding checkpoints, hybrid exact-vector/lexical/identifier retrieval, atomic publication, rollback and persistent source revocation.
-- Strict excerpt-only answers, evidence ID/schema checks, independent coverage pass using the same local model, conservative abstention, no unchecked streaming, and safe text rendering.
+- Bounded research decisions, one optional local-search round, cited grounded synthesis, an independent grounding pass using the same local model, conservative abstention, no unchecked streaming, and safe text rendering with inspectable exact evidence quotes.
 - Memory-bounded exact/embedding/retrieval caches and semantic candidate reuse with revalidation. Scope/history/profile/generation keys, request coalescing, bounded admission, deadlines and model quarantine on uncertain completion.
 - Opt-in daily refresh with persistent retry backoff, previous-corpus retention on failure, freshness status, snapshot integrity checks, backup tooling and a restore runbook.
 - OpenAPI contract, reproducible setup helpers, Maven wrapper, CI configuration, dependency-update configuration, and a generated CycloneDX SBOM (`target/bom.json` / `target/bom.xml`). An SBOM is an inventory, not a vulnerability assessment.
 
-## LangChain4j integration verification (2026-08-31)
+## Bounded Agentic RAG verification (2026-08-31)
 
-- Added pinned `langchain4j-core:1.19.0` with reusable PromptStage and typed EvidencePromptChain operations. A custom guarded ChatModel preserves existing Ollama raw HTTP behavior. No automatic agent, RAG, memory, tool or repair/retry subsystem is enabled.
-- Moved policy prompts to packaged resources; added a template/stage digest to answer identity and advanced policy to `extractive-v5:retrieval-v2`. Embedding identity, database schema, corpus generation and strict excerpt rendering remain unchanged.
+- Replaced the extractive selection/coverage flow with three explicit `AgenticPromptChain` stages: research decision, cited answer draft, and grounding review.
+- A research decision can request one through three local-corpus queries. Java batches their Nomic embeddings, executes at most one additional retrieval round in the pinned generation, and does not expose arbitrary tools or another planning loop.
+- Java validates action consistency, query bounds, service filters, every claim/evidence alias, source state, and server-built citations. The UI now separates synthesized claims from exact stored evidence.
+- Unit/policy/security/architecture/model-contract/local-metrics tests: **45 passed**. PostgreSQL integration tests: **6 passed** in an isolated native PostgreSQL schema. Total: **51**, none skipped.
+- Updated real-model smoke: **8/8 passed** against Qwen3 4B and Nomic v1.5 with the 120-page/1,330-passage corpus. Answered cache misses completed in 8.1–18.9 seconds in the final warm run; the exact cache hit completed in 13 ms. A browser cold-model check completed in 30.0 seconds. Results: `.cache/bounded-agent/smoke-report-six-passages.json`.
+- The real run exposed an Ollama 0.33 grammar limit for a nested 2,000-character repetition. The response schema now leaves that string unbounded at the transport layer and retains the 2,000-character Java check. Deterministic 4xx/invalid responses now release model health; only uncertain completion and server failures quarantine it.
+- The in-app browser loaded the UI, reported 120 documents/1,330 passages, submitted an S3 question, rendered GROUNDED_SYNTHESIS claims, opened server-owned AWS documentation links, and exposed exact stored evidence in the provenance panel with no browser console errors. Readiness was UP.
+- Local operations now write Spring logs and an atomic privacy-safe `rag.*` metrics JSON snapshot under the system temporary directory. Model counters distinguish embedding, research, answer, and grounding success/rejection/failure.
+
+## Historical LangChain4j migration verification (2026-08-31)
+
+- Added pinned `langchain4j-core:1.19.0` with reusable PromptStage and the then-current typed extractive operations. A custom guarded ChatModel preserved existing Ollama raw HTTP behavior. This table records the completed migration baseline before the bounded-agent change above.
+- Moved policy prompts to packaged resources and added a template/stage digest to answer identity. Embedding identity, database schema, and corpus generation remained unchanged.
 - Added high-level component/ingestion diagrams, low-level class/sequence/ER diagrams, a prompt extension guide, platform matrix and root AGENTS.md. Corrected earlier design descriptions of unimplemented tables, lifecycle states and scheduling mechanisms.
 - The product is not M1-specific. Mac ARM64/16 GB remains the reference environment. Linux/WSL2/other hosts have provisioning guidance but have not passed full native-library, model, performance, security and offline validation.
 
@@ -85,7 +96,7 @@ These are single observations on this Mac, not p50/p95 measurements. The model w
 - **Native PostgreSQL fallback:** project-local Postgres.app binaries under `.tools/` and data under `data/postgres`; no global Docker settings were changed. Docker Compose remains available for a healthy Docker installation.
 - **Extraction v2:** split long lists at item/child boundaries and tables at rows with repeated headers. Preserve code; reject oversized indivisible examples. Two oversized example pages were replaced by related reference pages while retaining all quotas. The manifest was selected by the implementation agent and validated mechanically, not independently reviewed by a company domain expert.
 - **Retrieval v2:** English stemming/stop-word handling with disjunctive lexical candidates, reciprocal rank fusion, and separate exact-identifier hits. Generic acronyms such as AWS/IAM are excluded from identifier boosts. A regression test covers the Lambda answer being displaced by generic AWS text.
-- **Original answer policy v4 (now v5 with prompt-content identity):** use short, request-local evidence aliases that resolve only to supplied stored IDs and canonical map serialization for reproducible prompts across JVM restarts. Prefer the smallest sufficient excerpt set. Coverage checks evaluate the question actually asked, while still requiring relevant qualifications and complete prerequisites for requested procedures. No synthesized mode is implemented.
+- **Current answer policy:** use request-local evidence aliases that resolve only to supplied stored IDs and canonical map serialization for reproducible prompts. The model may request one bounded additional local search round, then drafts cited claims and performs a separate grounding review. Synthesized prose is enabled with residual same-model validation risk.
 - **Region/version filtering:** supplied region/version values trigger clarification because the baseline corpus cannot reliably establish those scopes. It does not pretend to implement granular regional/version-aware retrieval.
 - **Scheduling:** opt-in while Java runs, not a macOS daemon. Database session locks replace a lease-expiry protocol locally. Batches release model capacity between calls; strict chat-priority scheduling is not implemented.
 - **UI cancellation:** stops waiting without claiming guaranteed server-side inference cancellation. Inference timeouts quarantine the runtime to avoid uncertain concurrent work.

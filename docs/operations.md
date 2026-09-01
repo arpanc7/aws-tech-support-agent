@@ -52,7 +52,9 @@ Readiness checks index/model presence and compatibility without inference. It is
 ./scripts/run retrieve --service=LAMBDA --question='What is the maximum timeout for an AWS Lambda function?'
 ```
 
-This explicit diagnostic prints retrieved documentation, scores, and IDs. `--check` also runs selection/verification on the first eight results; it may exceed normal API budgets, so use chat for the actual response policy. Keep diagnostics local. Normal logs contain job/source IDs and state, not prompts or document bodies. Actuator includes request timing, status/cache disposition, rejection, JVM/HTTP/database metrics. Stage-level tracing remains future work.
+This explicit diagnostic prints retrieved documentation, scores, and IDs. `--check` also runs the research decision and, for an ANSWER decision, the draft and grounding review on the first eight results. It intentionally does not execute SEARCH_MORE; use chat for the complete policy. Keep diagnostics local.
+
+Normal logs contain job/source IDs and state, not prompts or document bodies. By default Spring writes them to the terminal and `${java.io.tmpdir}/aws-tech-support-agent/application.log`; set `RAG_LOG_FILE` to override the file. Actuator includes request timing, status/cache disposition, rejection, inference, research-decision, additional-search, JVM, HTTP, and database metrics. Every 30 seconds the service atomically replaces `${java.io.tmpdir}/aws-tech-support-agent/metrics.json` with privacy-safe `rag.*` counters, including embedding/research/answer/grounding success, rejection, and failure counts. Override the location with `RAG_METRICS_FILE` or the interval with `RAG_METRICS_SNAPSHOT_INTERVAL`. Both files are operational state and must not be committed.
 
 ## Backup and restore
 
@@ -87,8 +89,8 @@ Add identity/authorization, tenant boundaries, TLS, managed secrets, separate mi
 
 ## Prompt-chain rollout
 
-Prompts are packaged resources, not mutable HTTP settings. Edit the reviewed files under `src/main/resources/prompts` and the explicit stages in EvidencePromptChain, following [prompt-chains.md](prompt-chains.md). Run formatting, automated tests and real-model probes; build the jar and restart Java. Do not restart/download models or re-ingest solely for a prompt change. Prompt digests isolate answer caches; embedding profiles remain compatible.
+Prompts are packaged resources, not mutable HTTP settings. Edit the reviewed files under `src/main/resources/prompts` and the explicit stages in AgenticPromptChain, following [prompt-chains.md](prompt-chains.md). Run formatting, automated tests and real-model probes; build the jar and restart Java. Do not restart/download models or re-ingest solely for a prompt change. Prompt digests isolate answer caches; embedding profiles remain compatible.
 
-The guarded LangChain4j bridge retains raw ChatML, output schemas, tokenizer checks and the original deadline. Never work around a failed stage by adding an automatic retry, cloud fallback, tool access, or skipped verification. Model-profile/embedding changes need their own corpus and evaluation plan.
+The guarded LangChain4j bridge retains raw ChatML, output schemas, tokenizer checks and the original deadline. The only model-directed operation is one optional round of one to three local corpus queries executed by Java. Never work around a failed stage by adding an automatic retry, cloud fallback, arbitrary tool access, another research loop, or skipped verification. Model-profile/embedding changes need their own corpus and evaluation plan.
 
 This rollout does not add per-request prompt logging or hosted tracing. Historical explicit trace artifacts under `.cache/rag-trace` remain local and may contain documentation text; do not commit or publish them indiscriminately.

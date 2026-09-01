@@ -1,112 +1,116 @@
 # High-level design: AWS Tech Support Agent
 
-Baseline 0.3 · 2026-08-31 · User-authorized LangChain4j integration.
+Baseline 0.4 · 2026-08-31 · User-authorized bounded Agentic RAG.
 
-This document describes implemented boundaries. See [low-level design](low-level-design.md) for classes, sequences and storage; [requirements](requirements.md) for policy; and [verification status](implementation-status.md) for measured results and outstanding production gates.
+This is a local documentation assistant. It does not inspect an AWS account, execute commands, call AWS APIs, or search the web while answering. Java owns all execution limits and validation; Qwen may choose only among reviewed decisions and local search queries.
 
 ## System context
 
-The product is a portable local Java documentation assistant, not an AWS account operator. Java 21, a compatible Ollama runtime and PostgreSQL/pgvector define the runtime contract. Mac ARM64 with 16 GB RAM is the tested reference environment, not an architectural restriction. [Platform setup](platform-setup.md) distinguishes supported setup paths from unverified platforms.
-
 ```mermaid
 flowchart LR
-    User[Local user] --> Browser[Browser: HTML/CSS/JS]
-    subgraph Host[Local host boundary]
-        Browser -->|HTTP 8080| API[Spring Boot application]
+    User[Local user] --> Browser[Browser UI]
+    subgraph Host[Local host]
+        Browser -->|HTTP 8080| API[Java 21 / Spring Boot]
         API -->|JDBC 54329| DB[(PostgreSQL + pgvector)]
-        API -->|HTTP 11434| Ollama[Ollama: Qwen + Nomic]
-        API --> Files[Snapshots and pinned tokenizers]
-        Operator[Operator CLI / enabled scheduler] --> API
+        API -->|HTTP 11434| Ollama[Ollama]
+        Ollama --> Nomic[Nomic Embed Text]
+        Ollama --> Qwen[Qwen3 4B]
+        API --> Files[Snapshots and tokenizers]
     end
-    API -->|Explicit setup or ingestion only| AWS[Approved AWS documentation]
+    Manifest[Approved AWS manifest] -->|setup or refresh only| API
+    API -->|refresh only| AWS[docs.aws.amazon.com]
 ```
 
-All listeners bind to loopback. The browser never calls Ollama or PostgreSQL directly. Answering has no web search, AWS SDK/account access, tools, shell execution or cloud fallback. The database runs in the pinned Docker image or an independently provisioned native PostgreSQL instance. Ollama runs on the host; macOS uses native Metal acceleration.
+All listeners bind to loopback. The browser never calls Ollama or PostgreSQL. Answer requests use only the published local corpus. Mac ARM64 with 16 GB RAM is the tested reference host, not an architectural restriction.
 
 ## Application components
 
 ```mermaid
 flowchart TD
-    UI[Static UI] --> Controller[ChatController + LocalSecurityFilter]
-    Controller --> Answer[AnswerQuestion: admission and policy]
-    Answer --> Cache[Caffeine: exact / embedding / candidate caches]
-    Answer --> Repository[CorpusRepository port]
-    Repository --> Pg[PostgresCorpusRepository]
-    Pg --> DB[(Versioned corpus and vectors)]
-    Answer --> Model[LocalModel port]
+    UI[Static UI] --> Controller[ChatController]
+    Controller --> Policy[AnswerQuestion]
+    Policy --> Cache[Caffeine caches]
+    Policy --> Repo[CorpusRepository]
+    Repo --> PG[PostgresCorpusRepository]
+    PG --> DB[(Versioned corpus + vectors)]
+    Policy --> Model[LocalModel]
     Model --> Adapter[OllamaModel]
-    Adapter --> Chain[EvidencePromptChain]
-    Chain --> Stage[PromptStage: LangChain4j templates and ChatModel]
-    Stage --> Guard[GuardedChatModel: shared deadline]
-    Guard --> Transport[Bounded raw HTTP + token/schema checks]
-    Transport --> Ollama[Local Ollama]
-    Adapter -->|Nomic embedding HTTP| Ollama
-    Answer --> Render[Stored excerpt + server citation]
+    Adapter --> Chain[AgenticPromptChain]
+    Chain --> Stages[LangChain4j PromptStage]
+    Stages --> Guard[Guarded ChatModel]
+    Guard --> Qwen[Qwen3 4B]
+    Adapter --> Nomic[Nomic embeddings]
+    Policy --> Validate[Schema, citation, source and grounding checks]
+    Validate --> Render[Synthesized claims + stored evidence]
     Render --> UI
 ```
 
-`GuardedChatModel` is an inner adapter in `OllamaModel`: it translates LangChain4j messages into the existing checked raw Ollama protocol. LangChain4j core 1.19.0 provides `PromptTemplate`, `ChatRequest`, `ChatModel` and schema types. AI Services proxies, automatic RAG, chat memory, agent loops, tools, output-repair retries and the stock Ollama provider client are **not** enabled.
+LangChain4j core supplies prompt templates, request objects, response schemas, and an extensible stage abstraction. It does not run an automatic agent. `AnswerQuestion` explicitly orders every stage; `OllamaModel` preserves the bounded raw Ollama transport, token checks, shared deadline, inference lock, and uncertain-completion quarantine.
 
-| Package | Implemented responsibility |
-| --- | --- |
-| `domain` | `Types`, `Deadline`, `SupportException`: requests, evidence, provenance and policy identities |
-| `ports` | `LocalModel`, `CorpusRepository`, `TokenCounter`, `DocumentSource`, `DocumentParser`, `WorkCoordinator` |
-| `application` | `AnswerQuestion`, `IngestCorpus`, `DocumentChunker`, `Hashes` |
-| `adapters.inbound` | REST, operator commands, scheduler, local security, errors and readiness |
-| `adapters.outbound` | Prompt stages, guarded Ollama, JDBC, tokenizers, fetching/parsing and advisory locks |
-| `bootstrap` | `RagProperties`; startup is `AwsSupportApplication.main()` |
-| `resources/static` | UI, with no frontend runtime or CDN |
-| `resources/prompts` | Reviewed packaged policies and evidence-data template |
+## Bounded answer workflow
 
-Domain/ports remain framework-independent. LangChain4j stays in outbound adapters; application code owns the decision to accept, abstain, clarify, cache or render. Controllers construct neither prompts nor SQL.
+```mermaid
+flowchart TD
+    A[Validate request and pin corpus] --> B{Validated exact cache?}
+    B -->|yes| Z[Return cached response]
+    B -->|no| C[Embed question with Nomic]
+    C --> D[Hybrid vector + lexical retrieval]
+    D --> E[Budget up to 6 passages]
+    E --> F{Qwen research decision}
+    F -->|CLARIFY| G[Ask for clarification]
+    F -->|UNAVAILABLE| H[Abstain]
+    F -->|ANSWER| J[Qwen drafts cited claims]
+    F -->|SEARCH_MORE| I[Embed 1-3 queries in one batch]
+    I --> K[Run one local retrieval per query]
+    K --> L[Merge, deduplicate and rebudget evidence]
+    L --> J
+    J --> M[Java validates every evidence alias]
+    M --> N{Qwen grounding review}
+    N -->|supported| O[Recheck sources; build server citations]
+    N -->|unsupported or uncertain| H
+    O --> P[Cache and return buffered response]
+```
 
-## Answering policy
+The search branch can run only once and accepts at most three query strings. The model cannot request another planning step after search. Java applies the user's explicit service filter to every query and executes only the existing local repository method. Follow-up embeddings are batched, and all work shares the original 60-second deadline.
 
-1. Validate and admit the request, pin a ready corpus generation, and check installed model digests.
-2. Check the exact cache, scoped by question/history/filters, generation, policy epoch, models and prompt-content identity. Cache hits still recheck source validity.
-3. Clarify explicit region/version filters; abstain for recognized live-state patterns. These are limited heuristics, not universal scope detection.
-4. Obtain the prefixed question embedding from cache or Nomic.
-5. Retrieve dense cosine and English lexical candidates, optionally restricted by reused candidate IDs; merge rankings with exact identifier matches.
-6. Deduplicate text, apply the initial 0.40 cosine cutoff, and retain up to eight passages within token budgets.
-7. LangChain4j selection chooses at most three aliases. Java validates membership, uniqueness and decision consistency.
-8. LangChain4j coverage checks the original question against only those selected excerpts. Missing, unsupported or uncertain evidence causes abstention.
-9. Java rechecks provenance/epoch, copies stored text, builds citations and caches only accepted answers.
+A normal answered miss uses one Nomic call and three Qwen calls: research decision, answer draft, and grounding review. `SEARCH_MORE` adds one batched Nomic call and up to three database searches, but no extra Qwen planning loop. Exact answer hits skip inference. Failures do not trigger automatic repair or model retries.
 
-A fresh successful request normally uses one Nomic inference and two Qwen inferences. Embedding-cache hits skip Nomic; exact-answer hits skip all inference. If reused retrieval candidates fail, a single full-retrieval fallback may repeat selection/coverage, up to four Qwen calls under the same 60-second deadline. No framework retry adds calls.
+## Grounding contract
 
-The second Qwen pass is not an independent truth oracle. Strict excerpts prevent newly generated factual sentences, but do not prove relevance, completeness, freshness or source authenticity. Synthesized prose remains disabled.
+- The answer stage receives only the user question and budgeted evidence text with temporary aliases such as `E1`.
+- Each of at most six claims must cite one to three supplied aliases. Unknown, duplicate, empty, or uncited claims are rejected.
+- The grounding stage receives only the draft and the passages that draft cites. `UNSUPPORTED` or `UNCERTAIN` rejects the complete answer.
+- Java maps aliases to stored chunk IDs, rechecks the active corpus and revocation epoch, and creates citation IDs and approved `docs.aws.amazon.com` URLs.
+- The UI shows synthesized claims and the exact stored citation quote separately.
+- No unchecked token is streamed or cached. Missing or uncertain evidence returns “Information is not available in the local documentation.”
+
+These controls reduce unsupported output; they cannot guarantee zero hallucinations. Qwen performs both generation and review, and the local corpus can be incomplete or stale. Production acceptance therefore includes human-reviewed grounding and adversarial cases.
+
+## Caching and context
+
+Exact responses are scoped by normalized question, up to three previous user questions, filters, corpus generation, policy epoch, model identities, and prompt digest. Similar-query entries reuse candidate IDs only. They are merged with current full retrieval and never replay an old final answer. Every accepted cache hit rechecks model profile and source validity. Caches are bounded and process-local.
+
+Conversation history helps resolve the current question but is never evidence. There is no hidden or persistent model chat session. Every model call is a complete, stateless prompt.
 
 ## Ingestion and publication
 
 ```mermaid
 flowchart LR
-    Manifest[Approved manifest] --> Lock[Ingestion lock + job]
-    Lock --> Fetch[Conditional fetch / approved import]
+    Manifest[Approved manifest] --> Fetch[Conditional fetch/import]
     Fetch --> Snapshot[Content-addressed HTML]
-    Snapshot --> Parse[Structural extraction and chunking]
+    Snapshot --> Parse[Structural extraction + chunking]
     Parse --> Check{Compatible checkpoint?}
-    Check -->|Yes| Reuse[Reuse vector]
-    Check -->|No| Embed[Nomic + persist checkpoint]
-    Reuse --> Complete[All required sources complete]
-    Embed --> Complete
-    Complete --> Publish[One transaction: rows + active pointer]
-    Publish --> Ready[(Ready generation)]
+    Check -->|yes| Reuse[Reuse vector]
+    Check -->|no| Embed[Nomic document embedding]
+    Reuse --> Publish[Atomic publication]
+    Embed --> Publish
+    Publish --> Ready[(Active generation)]
 ```
 
-Downloads and inference occur outside publication transactions. Fetching is sequential and embeddings are generated one input at a time. Jobs and checkpoints are durable; documents/chunks are staged in Java before publication. There is no persisted `BUILDING` generation or separate evidence-span table: a complete chunk is the cited span. Identical fingerprints retain the generation; failures retain the previous corpus and completed checkpoints.
+All required sources must complete before publication. Failed refreshes preserve the active generation. Prompt changes invalidate answer-cache identity without re-embedding; embedding, tokenizer, or extraction changes require a compatible corpus rebuild.
 
-Daily refresh is opt-in while the process runs, with a persisted 15-minute failure backoff. PostgreSQL session advisory locks coordinate processes; they are not expiring distributed leases with fencing tokens. Strict chat-priority scheduling and automatic retention pruning are not implemented. See [data lifecycle](data-lifecycle.md).
+## Scale and deployment boundary
 
-## Resource and trust boundaries
+The local profile uses a 512 MiB JVM heap, eight database connections, five admitted requests, one coordinated inference operation, an 8,192-token Qwen context, up to 4,500 evidence tokens, and 800 output tokens. These are enforced limits, not cross-platform SLO evidence.
 
-The initial profile uses a 512 MiB JVM heap, 128 MiB accounted cache-entry budget, eight JDBC connections, five admitted requests per JVM, and one application-coordinated inference at a time. Qwen context is 8,192 tokens with at most 4,500 evidence and 800 output tokens; the final prompt check reserves another 128 tokens. These are settings, not proven cross-platform SLOs.
-
-Durable model health is marked in-progress before inference. Uncertain completion, timeout or process death leaves it quarantined until operator recovery. Direct terminal Ollama clients bypass the application lock; avoid concurrent use during app operation/evaluation.
-
-Host/Origin/CSRF controls, CSP, size limits, approved ingestion sources, pinned profiles and parameterized SQL reduce risk. This profile does not provide company identity, tenant isolation, TLS, least-privilege database roles, HA or a completed security audit.
-
-## Extension and distributed deployment
-
-Add explicit prompt stages using the [extension guide](prompt-chains.md). New stages must share deadlines and preserve validation gates. Model outputs cannot choose tools, sources or the next operation.
-
-Separating ingestion/serving, distributed admission, external caches/invalidation, managed databases, identity and tenant scope require additional design and evaluation. LangChain4j does not provide those automatically. Keep replaceable ports and immutable generations, and measure contention before splitting the modular monolith.
+The ports allow future remote services, but a company deployment still needs identity, authorization, TLS, tenant boundaries, managed secrets, distributed admission and caching, HA storage, security review, observability, and the reviewed quality benchmark. Autonomous tools or AWS account actions require a separate threat model and authorization design.

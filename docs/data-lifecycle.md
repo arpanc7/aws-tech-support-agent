@@ -1,6 +1,6 @@
 # Corpus, preprocessing and refresh
 
-Baseline 0.3 · 2026-08-31. Implements B-02/B-03/B-04/B-09/B-15/B-16/B-17. The pipeline is platform-neutral; [platform setup](platform-setup.md) records the reference machine and pending validation.
+Baseline 0.4 · 2026-08-31. Implements B-02/B-03/B-04/B-09/B-15/B-16/B-17. The pipeline is platform-neutral; [platform setup](platform-setup.md) records the reference machine and pending validation.
 
 ## Corpus scope
 
@@ -22,7 +22,7 @@ The full seed manifest contains 120 distinct official AWS HTML pages. That count
 | Representation | Storage and purpose |
 | --- | --- |
 | Raw source bytes | `data/snapshots/<sha256>.html`, immutable audit/reprocessing input |
-| Canonical evidence | `chunk.content`, structural text copied into citations and answers |
+| Canonical evidence | `chunk.content`, structural text copied exactly into citation quotes and supplied as the sole factual basis for synthesis |
 | Derived retrieval input | `chunk.embedding_input`, 768-dimensional embedding and lexical fields |
 
 Raw snapshots, source metadata and derived text are separate. A citation points to a whole chunk with heading/anchor provenance; there is no independent evidence-span/offset table. This limits excerpt granularity and does not prove that qualifications spanning multiple chunks are retained.

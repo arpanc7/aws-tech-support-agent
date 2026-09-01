@@ -5,10 +5,10 @@ import com.acme.awssupport.domain.Types.*;
 import java.util.List;
 
 /**
- * Model boundary separating vector generation from evidence selection and coverage verification.
+ * Model boundary separating vector generation from bounded research and answer stages.
  *
- * <p>Callers supply the evidence explicitly. Implementations must not add outside knowledge or
- * expose a model-generated answer as a trusted citation.
+ * <p>Callers supply evidence explicitly. Model-proposed searches, claims, and citations remain
+ * untrusted until the application validates their shape, provenance, and grounding.
  */
 public interface LocalModel {
   /**
@@ -22,9 +22,12 @@ public interface LocalModel {
    */
   List<float[]> embed(List<String> inputs, Deadline deadline);
 
-  /** Asks the generator to choose sufficient evidence; the returned selection remains untrusted. */
-  Selection select(Question question, List<Evidence> evidence, Deadline deadline);
+  /** Decides whether initial evidence is enough or one additional local search round is useful. */
+  ResearchDecision decide(Question question, List<Evidence> evidence, Deadline deadline);
 
-  /** Checks whether selected excerpts support the question; uncertainty must not return true. */
-  boolean verify(Question question, List<Evidence> evidence, Deadline deadline);
+  /** Drafts concise claims using only supplied evidence and model-selected evidence aliases. */
+  AnswerDraft answer(Question question, List<Evidence> evidence, Deadline deadline);
+
+  /** Reviews the complete draft against its cited evidence; uncertainty must not return true. */
+  boolean verify(Question question, AnswerDraft draft, List<Evidence> evidence, Deadline deadline);
 }
