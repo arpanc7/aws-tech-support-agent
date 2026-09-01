@@ -1,0 +1,71 @@
+{
+  "ollamaVersion": "0.33.2",
+  "ollamaUrl": "https://github.com/ollama/ollama/releases/download/v0.33.2/ollama-darwin.tgz",
+  "ollamaSha256": "5751e296a2cd545939bdd51b700de0c20d319f0e723c9d7f48bebb5ab0b731d4",
+  "models": [
+    {
+      "name": "qwen3:4b",
+      "model": "qwen3:4b",
+      "modified_at": "2026-08-30T10:56:03.155226658-07:00",
+      "size": 2497293931,
+      "digest": "359d7dd4bcdab3d86b87d73ac27966f4dbb9f5efdfcc75d34a8764a09474fae7",
+      "details": {
+        "parent_model": "",
+        "format": "gguf",
+        "family": "qwen3",
+        "families": [
+          "qwen3"
+        ],
+        "parameter_size": "4.0B",
+        "quantization_level": "Q4_K_M",
+        "context_length": 262144,
+        "embedding_length": 2560
+      },
+      "capabilities": [
+        "completion",
+        "tools",
+        "thinking"
+      ]
+    },
+    {
+      "name": "nomic-embed-text:v1.5",
+      "model": "nomic-embed-text:v1.5",
+      "modified_at": "2026-08-30T10:55:12.187406883-07:00",
+      "size": 274302450,
+      "digest": "0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f",
+      "details": {
+        "parent_model": "",
+        "format": "gguf",
+        "family": "nomic-bert",
+        "families": [
+          "nomic-bert"
+        ],
+        "parameter_size": "137M",
+        "quantization_level": "F16",
+        "context_length": 2048,
+        "embedding_length": 768
+      },
+      "capabilities": [
+        "embedding"
+      ]
+    }
+  ],
+  "tokenizers": [
+    {
+      "name": "nomic",
+      "repo": "nomic-ai/nomic-embed-text-v1.5",
+      "revision": "e9b6763023c676ca8431644204f50c2b100d9aab",
+      "url": "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/e9b6763023c676ca8431644204f50c2b100d9aab/tokenizer.json",
+      "sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66",
+      "path": "data/tokenizers/nomic/tokenizer.json"
+    },
+    {
+      "name": "qwen",
+      "repo": "Qwen/Qwen3-4B",
+      "revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+      "url": "https://huggingface.co/Qwen/Qwen3-4B/resolve/1cfa9a7208912126459214e8b04321603b3df60c/tokenizer.json",
+      "sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "path": "data/tokenizers/qwen/tokenizer.json"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+.tools/
+.cache/
+data/
+target/
+.env
+*.log
+.DS_Store
+*.iml
+.idea/
+__pycache__/
+*.py[cod]

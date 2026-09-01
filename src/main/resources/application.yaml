@@ -1,0 +1,57 @@
+server:
+  address: 127.0.0.1
+  port: ${PORT:8080}
+  shutdown: graceful
+  error:
+    include-message: never
+    include-stacktrace: never
+spring:
+  application:
+    name: aws-support-agent
+  datasource:
+    url: ${RAG_DB_URL:jdbc:postgresql://127.0.0.1:54329/aws_support}
+    username: ${RAG_DB_USER:aws_support}
+    password: ${RAG_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 8
+      connection-timeout: 3000
+      data-source-properties:
+        socketTimeout: 10
+        options: -c statement_timeout=5000
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  threads:
+    virtual:
+      enabled: true
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db,corpus
+rag:
+  ollama-url: http://127.0.0.1:11434
+  chat-model: qwen3:4b
+  embedding-model: nomic-embed-text:v1.5
+  data-dir: ${RAG_DATA_DIR:data}
+  manifest: ${RAG_MANIFEST:config/sources.json}
+  request-timeout: 60s
+  refresh-interval: 24h
+  refresh-enabled: ${RAG_REFRESH_ENABLED:false}
+  context-tokens: 8192
+  max-evidence-tokens: 4500
+  max-chunks: 20000
+  minimum-similarity: 0.40
+  semantic-cache-similarity: 0.94
+logging:
+  level:
+    root: INFO
+    com.acme.awssupport: INFO

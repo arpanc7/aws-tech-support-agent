@@ -1,0 +1,185 @@
+{
+  "name": "aws-core-30",
+  "sources": [
+    {
+      "id": "iam-troubleshoot-access-denied-6b7211d9",
+      "service": "IAM",
+      "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_access-denied.html",
+      "localFile": null
+    },
+    {
+      "id": "iam-id-roles-b483f70a",
+      "service": "IAM",
+      "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html",
+      "localFile": null
+    },
+    {
+      "id": "iam-access-policies-7bc720d1",
+      "service": "IAM",
+      "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html",
+      "localFile": null
+    },
+    {
+      "id": "iam-reference-policies-evaluation-logic-76d60163",
+      "service": "IAM",
+      "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html",
+      "localFile": null
+    },
+    {
+      "id": "iam-id-credentials-mfa-80f8a548",
+      "service": "IAM",
+      "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_mfa.html",
+      "localFile": null
+    },
+    {
+      "id": "iam-reference-policies-evaluation-logic-accesspolicylanguage-interplay-b457de9e",
+      "service": "IAM",
+      "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_AccessPolicyLanguage_Interplay.html",
+      "localFile": null
+    },
+    {
+      "id": "iam-access-policies-understand-policy-summary-access-level-summaries-eb88b63c",
+      "service": "IAM",
+      "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_understand-policy-summary-access-level-summaries.html",
+      "localFile": null
+    },
+    {
+      "id": "iam-access-policies-policy-validator-2c857b87",
+      "service": "IAM",
+      "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_policy-validator.html",
+      "localFile": null
+    },
+    {
+      "id": "iam-access-policies-policy-summary-examples-aab2945e",
+      "service": "IAM",
+      "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_policy-summary-examples.html",
+      "localFile": null
+    },
+    {
+      "id": "iam-access-policies-understand-policy-summary-411815a1",
+      "service": "IAM",
+      "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_understand-policy-summary.html",
+      "localFile": null
+    },
+    {
+      "id": "s3-troubleshoot-403-errors-f5b71bc2",
+      "service": "S3",
+      "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/troubleshoot-403-errors.html",
+      "localFile": null
+    },
+    {
+      "id": "s3-access-control-block-public-access-3402cc49",
+      "service": "S3",
+      "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html",
+      "localFile": null
+    },
+    {
+      "id": "s3-welcome-e380da8d",
+      "service": "S3",
+      "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html",
+      "localFile": null
+    },
+    {
+      "id": "s3-versioning-d1400721",
+      "service": "S3",
+      "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/Versioning.html",
+      "localFile": null
+    },
+    {
+      "id": "s3-usingkmsencryption-e1e1c91f",
+      "service": "S3",
+      "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingKMSEncryption.html",
+      "localFile": null
+    },
+    {
+      "id": "s3-object-lifecycle-mgmt-5209ee6e",
+      "service": "S3",
+      "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html",
+      "localFile": null
+    },
+    {
+      "id": "s3-about-object-ownership-403772d7",
+      "service": "S3",
+      "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html",
+      "localFile": null
+    },
+    {
+      "id": "s3-troubleshooting-versioning-18f75dca",
+      "service": "S3",
+      "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/troubleshooting-versioning.html",
+      "localFile": null
+    },
+    {
+      "id": "s3-troubleshoot-lifecycle-4e9d314a",
+      "service": "S3",
+      "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/troubleshoot-lifecycle.html",
+      "localFile": null
+    },
+    {
+      "id": "s3-security-iam-id-based-policy-examples-7007b8c8",
+      "service": "S3",
+      "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/security_iam_id-based-policy-examples.html",
+      "localFile": null
+    },
+    {
+      "id": "ec2-troubleshootinginstancesconnecting-55f65810",
+      "service": "EC2",
+      "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/TroubleshootingInstancesConnecting.html",
+      "localFile": null
+    },
+    {
+      "id": "ec2-ec2-security-groups-6e1c653e",
+      "service": "EC2",
+      "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-security-groups.html",
+      "localFile": null
+    },
+    {
+      "id": "ec2-ec2-key-pairs-60cbc8da",
+      "service": "EC2",
+      "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html",
+      "localFile": null
+    },
+    {
+      "id": "ec2-ec2-instance-lifecycle-c0d88954",
+      "service": "EC2",
+      "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-lifecycle.html",
+      "localFile": null
+    },
+    {
+      "id": "ec2-monitoring-system-instance-status-check-1a3daa6c",
+      "service": "EC2",
+      "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/monitoring-system-instance-status-check.html",
+      "localFile": null
+    },
+    {
+      "id": "ec2-security-group-connection-tracking-6dd3de8d",
+      "service": "EC2",
+      "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/security-group-connection-tracking.html",
+      "localFile": null
+    },
+    {
+      "id": "ec2-creating-status-check-alarms-e5babc12",
+      "service": "EC2",
+      "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/creating_status_check_alarms.html",
+      "localFile": null
+    },
+    {
+      "id": "ec2-viewing-status-da17c65e",
+      "service": "EC2",
+      "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/viewing_status.html",
+      "localFile": null
+    },
+    {
+      "id": "ec2-viewing-metrics-with-cloudwatch-b19785d3",
+      "service": "EC2",
+      "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/viewing_metrics_with_cloudwatch.html",
+      "localFile": null
+    },
+    {
+      "id": "ec2-security-group-rules-reference-287bc479",
+      "service": "EC2",
+      "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/security-group-rules-reference.html",
+      "localFile": null
+    }
+  ]
+}

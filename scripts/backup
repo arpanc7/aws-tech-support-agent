@@ -1,0 +1,24 @@
+#!/bin/sh
+# Stop ingestion while backing up so all referenced immutable snapshots are included.
+set -eu
+cd "$(dirname "$0")/.."
+umask 077
+set -a
+. ./.env
+set +a
+DEST="$PWD/.cache/backups/$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir -p "$DEST"
+if [ "${RAG_DATABASE_MODE:-docker}" = native ]; then
+  PGPASSWORD="$RAG_DB_PASSWORD" .tools/Postgres.app/Contents/Versions/17/bin/pg_dump -h 127.0.0.1 -p 54329 -U aws_support -d aws_support --no-owner --no-acl -Fc -f "$DEST/database.dump"
+else
+  docker compose exec -T postgres pg_dump -U aws_support -d aws_support --no-owner --no-acl -Fc > "$DEST/database.dump"
+fi
+tar -czf "$DEST/artifacts.tar.gz" data/snapshots data/tokenizers config
+python3 - "$DEST" <<'PY'
+import hashlib,json,sys
+from pathlib import Path
+p=Path(sys.argv[1])
+hashes={f.name:hashlib.file_digest(f.open('rb'),'sha256').hexdigest() for f in p.iterdir() if f.is_file()}
+(p/'checksums.json').write_text(json.dumps(hashes,indent=2)+'\n')
+PY
+printf 'Backup created: %s\n' "$DEST"

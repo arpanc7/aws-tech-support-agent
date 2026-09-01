@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AWS Support · Local documentation assistant</title>
+  <meta name="description" content="A local AWS documentation assistant with verifiable source excerpts.">
+  <link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="AWS Support home"><span class="mark">a<span>↗</span></span><span>AWS Support<small>LOCAL KNOWLEDGE DESK</small></span></a>
+    <div class="workspace-label">WORKSPACE <span>01</span></div>
+    <div class="nav-current"><span>◉</span> Documentation chat</div>
+    <section class="corpus-card" aria-labelledby="corpus-heading"><h2 id="corpus-heading">Your knowledge base</h2>
+      <p id="corpus-state">Connecting to local storage…</p>
+      <div class="corpus-numbers"><div><strong id="doc-count">—</strong><small>documents</small></div><div><strong id="chunk-count">—</strong><small>passages</small></div></div>
+      <p class="snapshot" id="snapshot">Snapshot information will appear here.</p>
+      <button id="refresh-status" class="text-button" type="button">Refresh status ↻</button>
+    </section>
+    <div class="local-note"><span class="status-dot"></span><strong>Runs on your Mac</strong><p>Local models. Local sources.<br>No AWS account access.</p></div>
+    <footer>Demo assistant · Verify before acting</footer>
+  </aside>
+  <main>
+    <header class="topbar"><div><span class="eyebrow">TECHNICAL SUPPORT</span><h1>Ask your AWS docs.</h1><p id="mobile-snapshot" class="mobile-snapshot">Local documentation snapshot</p></div><div class="mode"><span class="status-dot"></span>Source excerpts</div></header>
+    <div class="chat-area">
+      <section id="welcome" class="welcome"><span class="section-number">DOCUMENTATION, WITH CONTEXT</span><h2>A clearer path to<br>your next answer.</h2><p>Ask about an AWS service. Get relevant passages from your local documentation, with sources you can inspect.</p>
+        <div class="suggestions"><button data-question="Can an explicit deny in a bucket policy cause an S3 access denied error?" type="button"><span class="service-tag">S3</span>Understand an access error<span class="arrow">↗</span></button><button data-question="How do I troubleshoot an SSH connection timeout to an EC2 instance?" type="button"><span class="service-tag">EC2</span>Troubleshoot a connection<span class="arrow">↗</span></button><button data-question="How does an explicit deny affect IAM permissions?" type="button"><span class="service-tag">IAM</span>Understand policy evaluation<span class="arrow">↗</span></button></div>
+      </section>
+      <section id="messages" class="messages" aria-label="Conversation" aria-live="polite" aria-relevant="additions"></section>
+      <p id="waiting" class="waiting" role="status" hidden><span class="pulse"></span>Finding and checking supporting documentation…</p>
+    </div>
+    <section class="composer-section"><form id="chat-form"><div class="composer-top"><label for="service">Search scope</label><select id="service"><option value="">All supported services</option><option>IAM</option><option>S3</option><option>EC2</option><option>VPC</option><option value="LAMBDA">Lambda</option><option value="CLOUDWATCH">CloudWatch</option></select><button id="clear" type="button" class="text-button">Clear chat</button></div>
+      <label class="sr-only" for="question">Your AWS question</label><textarea id="question" placeholder="Describe your AWS question or error…" rows="2" maxlength="4000" required></textarea>
+      <div class="composer-bottom"><small><span id="char-count">0</span> / 4,000 · Do not paste secrets.</small><div><button id="stop" type="button" class="stop" hidden>Stop waiting</button><button id="send" type="submit">Ask documentation <span>↑</span></button></div></div>
+    </form><p class="disclaimer">If the evidence is missing, the assistant will say so. Excerpts may be incomplete or outdated; this is not a diagnosis of your AWS account.</p></section>
+  </main>
+</body>
+</html>

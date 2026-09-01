@@ -1,0 +1,39 @@
+#!/bin/sh
+# Optional macOS fallback. Operates only on this project's PostgreSQL data directory.
+set -eu
+cd "$(dirname "$0")/.."
+set -a
+. ./.env
+set +a
+export PGPASSWORD="$RAG_DB_PASSWORD"
+export PGUSER=aws_support PGHOST=127.0.0.1 PGPORT=54329
+PG_BIN="$PWD/.tools/Postgres.app/Contents/Versions/17/bin"
+PG_DATA="$PWD/data/postgres"
+if [ ! -x "$PG_BIN/pg_ctl" ]; then
+  printf '%s\n' 'Install the optional runtime first: python3 scripts/setup-postgres.py' >&2
+  exit 1
+fi
+case "${1:-status}" in
+  start)
+    mkdir -p .cache data
+    if [ ! -f "$PG_DATA/PG_VERSION" ]; then
+      umask 077
+      PASSWORD_FILE=$(mktemp "$PWD/.cache/pg-password.XXXXXX")
+      trap 'rm -f "$PASSWORD_FILE"' EXIT HUP INT TERM
+      printf '%s\n' "$RAG_DB_PASSWORD" > "$PASSWORD_FILE"
+      "$PG_BIN/initdb" -D "$PG_DATA" -U aws_support --pwfile="$PASSWORD_FILE" --auth-host=scram-sha-256 --auth-local=scram-sha-256 --encoding=UTF8 --locale=C
+      rm -f "$PASSWORD_FILE"
+      trap - EXIT HUP INT TERM
+    fi
+    if ! "$PG_BIN/pg_ctl" -D "$PG_DATA" status >/dev/null 2>&1; then
+      "$PG_BIN/pg_ctl" -D "$PG_DATA" -l "$PWD/.cache/postgres.log" -o '-h 127.0.0.1 -p 54329 -k /private/tmp -c shared_buffers=128MB -c max_connections=30 -c work_mem=8MB' start
+    fi
+    if [ "$("$PG_BIN/psql" -d postgres -Atqc "SELECT count(*) FROM pg_database WHERE datname='aws_support'")" = 0 ]; then
+      "$PG_BIN/createdb" aws_support
+    fi
+    "$PG_BIN/psql" -d aws_support -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS vector'
+    ;;
+  stop) exec "$PG_BIN/pg_ctl" -D "$PG_DATA" -m fast stop ;;
+  status) exec "$PG_BIN/pg_ctl" -D "$PG_DATA" status ;;
+  *) printf '%s\n' 'Usage: scripts/postgres-native start|stop|status' >&2; exit 2 ;;
+esac

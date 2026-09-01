@@ -1,0 +1,23 @@
+{
+  "name": "aws-smoke-3",
+  "sources": [
+    {
+      "id": "iam-troubleshoot-access-denied-6b7211d9",
+      "service": "IAM",
+      "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_access-denied.html",
+      "localFile": null
+    },
+    {
+      "id": "s3-troubleshoot-403-errors-f5b71bc2",
+      "service": "S3",
+      "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/troubleshoot-403-errors.html",
+      "localFile": null
+    },
+    {
+      "id": "ec2-troubleshootinginstancesconnecting-55f65810",
+      "service": "EC2",
+      "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/TroubleshootingInstancesConnecting.html",
+      "localFile": null
+    }
+  ]
+}

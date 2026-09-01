@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+if [ -x "$PWD/.tools/jdk/bin/java" ]; then
+  JAVA_HOME="$PWD/.tools/jdk"
+  export JAVA_HOME
+fi
+if [ -x "$PWD/.tools/apache-maven-3.9.11/bin/mvn" ]; then
+  exec "$PWD/.tools/apache-maven-3.9.11/bin/mvn" --no-transfer-progress -Dmaven.repo.local="$PWD/.cache/m2" "$@"
+fi
+exec mvn --no-transfer-progress "$@"

@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+if [ -f .env ]; then
+  set -a
+  . ./.env
+  set +a
+fi
+JAVA_BIN="${JAVA_HOME:-$PWD/.tools/jdk}/bin/java"
+if [ ! -x "$JAVA_BIN" ]; then JAVA_BIN=java; fi
+export DJL_CACHE_DIR="$PWD/.cache/djl"
+export HF_HUB_OFFLINE=1
+if [ ! -f target/aws-support-agent-0.1.0-SNAPSHOT.jar ]; then
+  printf '%s\n' 'Build first: ./scripts/maven package -DskipTests' >&2
+  exit 1
+fi
+if [ "$#" -eq 0 ] || [ "$1" = serve ]; then
+  if [ "$#" -gt 0 ]; then shift; fi
+  exec "$JAVA_BIN" -Xms128m -Xmx512m -jar target/aws-support-agent-0.1.0-SNAPSHOT.jar "$@"
+fi
+TASK_COMMAND=$1
+shift
+exec "$JAVA_BIN" -Xms128m -Xmx512m -jar target/aws-support-agent-0.1.0-SNAPSHOT.jar --spring.main.web-application-type=none --command="$TASK_COMMAND" "$@"

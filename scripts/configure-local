@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+umask 077
+if [ ! -f .env ]; then
+  python3 - <<'PY' > .env
+import secrets
+print('RAG_DB_PASSWORD=' + secrets.token_hex(24))
+PY
+fi
+mkdir -p data/snapshots data/tokenizers data/models .cache
+printf '%s\n' 'Local configuration ready; credentials are in ignored .env.'

@@ -1,0 +1,142 @@
+openapi: 3.0.3
+info:
+  title: Local AWS Tech Support API
+  version: 0.1.0
+  description: Local-only extractive RAG with LangChain4j selection and coverage stages behind a guarded Ollama adapter. All chat responses are buffered until validation completes. The HTTP contract is unchanged.
+servers:
+  - url: http://127.0.0.1:8080
+paths:
+  /api/v1/session:
+    get:
+      summary: Establish a local session and obtain a CSRF token
+      responses:
+        '200':
+          description: Sets HttpOnly SameSite=Strict RAG_SESSION cookie
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [csrfToken]
+                properties:
+                  csrfToken: {type: string}
+  /api/v1/corpus:
+    get:
+      summary: Current immutable corpus and freshness status
+      responses:
+        '200':
+          description: Corpus metadata; EMPTY until first publication
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generation: {type: string, format: uuid, nullable: true}
+                  publishedAt: {type: string, format: date-time, nullable: true}
+                  lastCompleteCheck: {type: string, format: date-time, nullable: true}
+                  documents: {type: integer}
+                  chunks: {type: integer}
+                  services: {type: object, additionalProperties: {type: integer}}
+                  stale: {type: boolean}
+                  state: {type: string, enum: [READY, EMPTY]}
+                  lastRefreshError: {type: string}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/v1/chat:
+    post:
+      summary: Ask a question using the local corpus
+      security:
+        - localSession: []
+          csrf: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [question]
+              properties:
+                question: {type: string, minLength: 1, maxLength: 4000}
+                previousQuestions:
+                  type: array
+                  maxItems: 3
+                  items: {type: string, minLength: 1, maxLength: 4000}
+                filters:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    service: {type: string, enum: ['', IAM, S3, EC2, VPC, LAMBDA, CLOUDWATCH]}
+                    region: {type: string, maxLength: 64, description: Nonempty scope requires clarification in this baseline.}
+                    documentVersion: {type: string, maxLength: 80, description: Nonempty scope requires clarification in this baseline.}
+      responses:
+        '200':
+          description: Answer, abstention, or clarification; never unchecked model prose
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ChatResponse'}
+        '400': {description: Invalid request or unknown properties}
+        '403': {description: Invalid Host, Origin, or session/CSRF token}
+        '413': {description: Request exceeds 32 KiB}
+        '415': {description: Use application/json}
+        '422': {description: Input or evidence exceeds a checked model token budget}
+        '429': {description: Local admission queue full; Retry-After header included}
+        '502': {description: Invalid dependency output}
+        '503': {$ref: '#/components/responses/Unavailable'}
+        '504': {description: Deadline or inference timeout; uncertain inference may require runtime restart/reset}
+        '500': {description: Unexpected error; no internal details returned}
+components:
+  securitySchemes:
+    localSession: {type: apiKey, in: cookie, name: RAG_SESSION}
+    csrf: {type: apiKey, in: header, name: X-CSRF-Token}
+  responses:
+    Unavailable:
+      description: Database, model, tokenizer, or compatible corpus unavailable
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    ChatResponse:
+      type: object
+      required: [requestId, status, answerMode, message, claims, citations, corpusGeneration, snapshotPublishedAt, cacheDisposition, semanticCandidatesUsed, durationMs]
+      properties:
+        requestId: {type: string, format: uuid}
+        status: {type: string, enum: [ANSWERED, INFORMATION_NOT_AVAILABLE, CLARIFICATION_REQUIRED]}
+        answerMode: {type: string, enum: [EXTRACTIVE_STRICT]}
+        message: {type: string}
+        reason: {type: string, nullable: true}
+        claims:
+          type: array
+          maxItems: 3
+          items:
+            type: object
+            required: [id, text, citationIds]
+            properties:
+              id: {type: string}
+              text: {type: string, description: Exact text from a stored evidence chunk}
+              citationIds: {type: array, items: {type: string}}
+        citations:
+          type: array
+          maxItems: 3
+          items:
+            type: object
+            required: [id, spanId, documentId, title, sourceUrl, heading, quote, fetchedAt]
+            properties:
+              id: {type: string}
+              spanId: {type: string}
+              documentId: {type: string}
+              title: {type: string}
+              sourceUrl: {type: string, format: uri}
+              heading: {type: string}
+              quote: {type: string}
+              fetchedAt: {type: string, format: date-time}
+        corpusGeneration: {type: string, format: uuid}
+        snapshotPublishedAt: {type: string, format: date-time}
+        cacheDisposition: {type: string, enum: [MISS, EXACT, COALESCED]}
+        semanticCandidatesUsed: {type: boolean}
+        durationMs: {type: integer, format: int64}
+    Error:
+      type: object
+      properties:
+        requestId: {type: string, format: uuid}
+        code: {type: string}
+        message: {type: string}
+        retryable: {type: boolean}

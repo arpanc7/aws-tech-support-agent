@@ -1,0 +1,23 @@
+name: aws-support-local
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.6-pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
+    environment:
+      POSTGRES_DB: aws_support
+      POSTGRES_USER: aws_support
+      POSTGRES_PASSWORD: ${RAG_DB_PASSWORD:?Run scripts/configure-local first}
+    ports:
+      - "127.0.0.1:54329:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    mem_limit: 1g
+    shm_size: 128mb
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=30", "-c", "work_mem=8MB"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aws_support -d aws_support"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+volumes:
+  postgres-data:
