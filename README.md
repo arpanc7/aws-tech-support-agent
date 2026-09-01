@@ -144,5 +144,6 @@ Tests use isolated schemas without clearing the corpus. Unit tests need no model
 - [Data lifecycle](docs/data-lifecycle.md), [acceptance criteria](docs/acceptance.md), [API contract](docs/openapi.yaml)
 - [Operations and recovery](docs/operations.md), [recorded end-to-end example](docs/rag-example-walkthrough.md), [verification status](docs/implementation-status.md)
 - [Repository guidance for coding agents](AGENTS.md)
+- [Contribution and required-review policy](CONTRIBUTING.md)
 
 Do not expose the local profile to a LAN/internet. It has browser protections, not company identity, tenant isolation, TLS, HA or a completed security audit. Readiness: `/actuator/health/readiness`; metrics: `/actuator/metrics`. Prompts, document bodies and credentials are not logged by default.
