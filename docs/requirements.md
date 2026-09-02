@@ -1,6 +1,6 @@
 # Requirements: AWS Tech Support Agent
 
-Version: 0.4 bounded-agent baseline · Date: 2026-08-31 · Agentic RAG implementation authorized by user
+Version: 0.4 bounded-agent baseline · Updated: 2026-09-02 · Agentic RAG implementation authorized by user
 
 `MUST` denotes a mandatory behavior. `SHOULD` denotes a default that requires a documented reason to change. Limits are starting configurations; authorization to implement is not acceptance of unmeasured quality claims. See [implementation status](implementation-status.md) for completed work and remaining release gates.
 

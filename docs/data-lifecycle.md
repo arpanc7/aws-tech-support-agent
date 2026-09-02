@@ -1,6 +1,6 @@
 # Corpus, preprocessing and refresh
 
-Baseline 0.4 · 2026-08-31. Implements B-02/B-03/B-04/B-09/B-15/B-16/B-17. The pipeline is platform-neutral; [platform setup](platform-setup.md) records the reference machine and pending validation.
+Baseline 0.4 · Updated: 2026-09-02. Implements B-02/B-03/B-04/B-09/B-15/B-16/B-17. The pipeline is platform-neutral; [platform setup](platform-setup.md) records the reference machine and pending validation.
 
 ## Corpus scope
 

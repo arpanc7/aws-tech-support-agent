@@ -1,6 +1,6 @@
 # Low-level design
 
-Baseline 0.4 · 2026-08-31 · Bounded Agentic RAG implementation.
+Baseline 0.4 · Updated: 2026-09-02 · Bounded Agentic RAG implementation.
 
 ## Main classes and ports
 

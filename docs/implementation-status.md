@@ -22,11 +22,12 @@ Updated: 2026-09-02. The user authorized the local demo, LangChain4j integration
 - Unit/policy/security/architecture/model-contract/local-metrics tests: **51 passed**; PostgreSQL integration tests: **6 passed**; total: **57**, none skipped.
 - Final real-model smoke: **10/10 passed**. The definitive uncached comparison returned one concise EC2-versus-Lambda claim with both canonical overview citations in 13.555 seconds; the subsequent final-suite comparison was an exact hit in 13 ms. Other answered misses took 11.576–25.661 seconds. Results: `.cache/bounded-agent/smoke-report-cross-service-final.json`; definitive response: `.cache/bounded-agent/cross-service-final-v4.json`.
 - The in-app browser displayed 122 documents/1,339 passages and rendered the grounded comparison with the EC2 and Lambda overview links under the all-services scope. Readiness remained UP.
+- Both GitHub Actions runs for commit `a338fd3` passed on Ubuntu using Testcontainers. A 50 ms timeout contract test was made deterministic after one of two concurrent runs expired during test startup before dispatch; the revised test proves the request was sent and then exceeded its two-second deadline.
 
 ## EC2 definition regression verification (2026-09-01)
 
 - Reproduced the website returning `CLARIFICATION_REQUIRED` for “What is EC2?” with **All supported services** selected. Initial all-service retrieval lacked a deterministic explicit-service scope, and the manifest omitted the EC2 overview page.
-- `AnswerQuestion` now applies an explicit filter or infers exactly one supported service named in the current question. It does not infer from history; zero or multiple names remain unscoped. The resolved scope also constrains the optional follow-up search.
+- At this stage, `AnswerQuestion` applied an explicit filter or inferred exactly one supported service named in the current question. It did not infer from history; zero or multiple names remained unscoped. The cross-service change above supersedes that multi-service behavior.
 - Added the official `What is Amazon EC2?` concepts page and atomically published a 121-document/1,338-passage generation. All 121 sources completed; compatible prior embedding checkpoints were reused.
 - Added unit regressions for inferred, explicit, and multi-service scope plus the exact no-filter EC2 real-model smoke case. Unit/policy/security/architecture/model-contract/local-metrics tests: **48 passed**; PostgreSQL integration tests: **6 passed**; total: **54**, none skipped.
 - Real-model smoke: **9/9 passed**. The EC2 definition returned `ANSWERED` in 24.016 seconds and cited the locally stored `What is Amazon EC2?` overview. Other cache-miss answers took 17.044–31.051 seconds in this run; the exact cache hit took 8 ms. These observations miss the proposed warm-latency target and are not p95 measurements. Results: `.cache/bounded-agent/smoke-report-ec2-fix.json`.
@@ -78,7 +79,7 @@ Post-migration smoke observations:
 
 These are single developer probes, not held-out quality or p95 evidence. The separate comparison trace ran after smoke testing and benefited from runtime caches; its timing is not an optimization claim. No fresh corpus download or restore audit was performed for this prompt-only change. Original ingestion/restore results below remain historical evidence.
 
-The first sandboxed test attempt failed because Mockito could not attach its test JVM and local HTTP access was restricted. Re-running with the required local process/network permissions passed; no test assertions were weakened. Docker remains unavailable on this host, so the Docker/remote-CI path is still unverified.
+The first sandboxed test attempt failed because Mockito could not attach its test JVM and local HTTP access was restricted. Re-running with the required local process/network permissions passed; no test assertions were weakened. Docker remains unavailable on this Mac, but the current branch has since passed both remote GitHub Actions jobs with Testcontainers on Ubuntu.
 
 ## Original baseline verification (2026-08-30)
 
@@ -94,7 +95,7 @@ The first sandboxed test attempt failed because Mockito could not attach its tes
 | Browser walkthrough | Rendered corpus counts, S3 service filter, question submission, stored excerpts, citations, provenance, and exact cache-hit metadata |
 | Docker image architecture | Registry manifest confirms Linux arm64 and amd64; multi-platform digest pinned |
 
-The full Docker/Testcontainers path could not run because this Mac's Docker Desktop failed during its own startup. The database integration suite ran against the real native PostgreSQL/pgvector fallback instead. CI is configured to use Testcontainers, but has not run in a remote CI environment.
+At the original baseline, the full Docker/Testcontainers path could not run because this Mac's Docker Desktop failed during its own startup. The database integration suite ran against the real native PostgreSQL/pgvector fallback instead. The current branch has since passed its remote GitHub Actions Testcontainers jobs; the Docker path on this Mac remains unverified.
 
 Original baseline smoke run (`.cache/smoke-report-stable.json`):
 
@@ -129,7 +130,7 @@ The local demo is usable; the full production acceptance target in [acceptance.m
 1. Build and independently review the 200-case dataset; measure retrieval coverage, answer usefulness, abstention quality, adversarial behavior and dangerous semantic-neighbor cases on held-out data. Similarity thresholds remain initial settings, not calibrated guarantees.
 2. Expand resilience tests for process death during inference/ingestion, deadline/queue pressure, cancellation, TTL/eviction, publication races, and failure/restart scheduling. The existing suite does not cover every A-01–A-27 scenario.
 3. Measure sustained load, cold/warm p50/p95 and total unified memory; test physically disconnected operation. The app's request path uses local endpoints and local assets, but a full offline network audit was not performed.
-4. Run the pinned Docker path and CI, dependency vulnerability/license review, and a company security review. AWS documentation remains separately owned content and is not redistributed in this source tree.
+4. Validate the pinned Docker path on the reference Mac and keep remote CI green. Complete dependency vulnerability/license review and a company security review. AWS documentation remains separately owned content and is not redistributed in this source tree.
 5. Add company identity, tenant isolation, TLS, secret management, least-privilege migration/runtime roles, distributed capacity management, production observability, HA and independently audited restore procedures before shared deployment.
 
 A same-model second pass is not an independent truth oracle. Verbatim excerpts eliminate model-written factual sentences, but can still be irrelevant, incomplete, maliciously sourced, or stale. Keep these limits visible when demonstrating the system.

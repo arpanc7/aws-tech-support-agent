@@ -1,6 +1,6 @@
 # Prompt stages and bounded agent workflow
 
-Baseline 0.4 · 2026-08-31.
+Baseline 0.4 · Updated: 2026-09-02.
 
 LangChain4j provides the prompt and structured-call building blocks. The application deliberately does not enable an automatic agent executor, tools, chat memory, framework RAG, or output repair. **AnswerQuestion** owns the fixed workflow and **AgenticPromptChain** exposes three typed operations.
 

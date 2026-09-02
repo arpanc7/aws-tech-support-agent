@@ -1,6 +1,6 @@
 # Acceptance and implementation plan
 
-Status: release criteria; implementation verification is in progress · Baseline: requirements/design 0.3
+Status: release criteria; implementation verification is in progress · Baseline: requirements/design 0.4 · Updated: 2026-09-02
 
 The following are release criteria, not a claim that every scenario passes. Automated unit/integration tests and real-model smoke probes now exist. See [implementation status](implementation-status.md) for actual results. The 200-case human-reviewed quality benchmark has not been completed.
 

@@ -1,6 +1,6 @@
 # High-level design: AWS Tech Support Agent
 
-Baseline 0.4 · 2026-08-31 · User-authorized bounded Agentic RAG.
+Baseline 0.4 · Updated: 2026-09-02 · User-authorized bounded Agentic RAG.
 
 This is a local documentation assistant. It does not inspect an AWS account, execute commands, call AWS APIs, or search the web while answering. Java owns all execution limits and validation; Qwen may choose only among reviewed decisions and local search queries.
 

@@ -1,6 +1,6 @@
 # Local operations
 
-Baseline 0.3 · 2026-08-31. See [platform setup](platform-setup.md) for host-specific provisioning and [low-level design](low-level-design.md) for runtime boundaries.
+Baseline 0.4 · Updated: 2026-09-02. See [platform setup](platform-setup.md) for host-specific provisioning and [low-level design](low-level-design.md) for runtime boundaries.
 
 `scripts/run` switches to the project root, loads ignored `.env`, sets the local tokenizer cache, and caps the JVM heap at 512 MiB. Keep `.env` private. Downloads occur only through setup and explicit or enabled refresh.
 
