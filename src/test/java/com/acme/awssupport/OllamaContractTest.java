@@ -237,9 +237,12 @@ class OllamaContractTest {
 
   @Test
   void uncertainTimeoutQuarantinesTheRuntime() {
-    delay = 300;
-    assertThatThrownBy(() -> model.embed(List.of("query"), new Deadline(Duration.ofMillis(50))))
+    // Leave enough startup time for slower CI hosts so the request is definitely dispatched. The
+    // much longer server delay then exercises uncertain in-flight completion, not preflight expiry.
+    delay = 5000;
+    assertThatThrownBy(() -> model.embed(List.of("query"), new Deadline(Duration.ofSeconds(2))))
         .isInstanceOf(SupportException.class);
+    assertThat(calls).hasValue(1);
     verify(jdbc, atLeastOnce()).update(contains("Inference completion uncertain"));
   }
 
