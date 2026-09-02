@@ -122,16 +122,93 @@ class AnswerQuestionTest {
   }
 
   @Test
-  void keepsMultipleExplicitServicesUnscoped() {
-    assertThat(AnswerQuestion.retrievalService(question("How do EC2 and S3 work together?")))
-        .isEmpty();
+  void retrievesEachNamedServiceIndependently() {
+    service.answer(question("Compare EC2 with Lambda"));
+
+    verify(repository)
+        .retrieve(
+            any(), eq("Compare EC2 with Lambda EC2 service overview"), eq("EC2"), any(), anyList());
+    verify(repository)
+        .retrieve(
+            any(),
+            eq("Compare EC2 with Lambda LAMBDA service overview"),
+            eq("LAMBDA"),
+            any(),
+            anyList());
+  }
+
+  @Test
+  void keepsQuestionsWithoutNamedServicesGloballyScoped() {
+    service.answer(question("How do explicit denies work?"));
+
+    verify(repository)
+        .retrieve(any(), eq("How do explicit denies work?"), eq(""), any(), anyList());
   }
 
   @Test
   void explicitFilterOverridesMentionedService() {
     Question scoped = new Question("Can EC2 use it?", List.of(), new Filters("VPC", "", ""));
 
-    assertThat(AnswerQuestion.retrievalService(scoped)).isEqualTo("VPC");
+    assertThat(AnswerQuestion.retrievalServices(scoped)).containsExactly("VPC");
+  }
+
+  @Test
+  void promotesCanonicalOverviewWithoutReorderingOtherEvidence() {
+    Evidence overview =
+        new Evidence(
+            "ec2-overview",
+            "ec2-concepts",
+            "EC2",
+            "What is Amazon EC2?",
+            "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/concepts.html",
+            "What is Amazon EC2?",
+            "concepts",
+            "Amazon EC2 provides scalable computing capacity.",
+            Instant.now(),
+            .8);
+
+    assertThat(AnswerQuestion.promoteOverview(List.of(evidence, overview)))
+        .containsExactly(overview, evidence);
+  }
+
+  @Test
+  void removesOneSidedTangentsFromGenericComparison() {
+    Evidence ec2 =
+        new Evidence(
+            "ec2-overview",
+            "ec2-concepts",
+            "EC2",
+            "What is Amazon EC2?",
+            "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/concepts.html",
+            "What is Amazon EC2?",
+            "concepts",
+            "Amazon EC2 provides scalable virtual servers.",
+            Instant.now(),
+            .9);
+    Evidence lambda =
+        new Evidence(
+            "lambda-overview",
+            "lambda-welcome",
+            "LAMBDA",
+            "What is AWS Lambda?",
+            "https://docs.aws.amazon.com/lambda/latest/dg/welcome.html",
+            "What is AWS Lambda?",
+            "welcome",
+            "AWS Lambda is a serverless compute service.",
+            Instant.now(),
+            .9);
+    DraftClaim comparison =
+        new DraftClaim(
+            "EC2 uses virtual servers; Lambda is serverless.", List.of(ec2.id(), lambda.id()));
+    DraftClaim tangent = new DraftClaim("Lambda has functions.", List.of(lambda.id()));
+
+    AnswerDraft retained =
+        AnswerQuestion.retainGenericComparisonClaims(
+            question("Compare EC2 with Lambda"),
+            new AnswerDraft("ANSWER", List.of(comparison, tangent)),
+            List.of(ec2, lambda));
+
+    assertThat(retained.claims()).containsExactly(comparison);
   }
 
   @Test

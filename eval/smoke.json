@@ -6,6 +6,7 @@
     {"id":"iam-deny", "question":"How does an explicit deny affect IAM permissions?", "service":"IAM", "expectedStatus":"ANSWERED"},
     {"id":"lambda-timeout", "question":"What is the maximum timeout for an AWS Lambda function?", "service":"LAMBDA", "expectedStatus":"ANSWERED"},
     {"id":"ec2-definition", "question":"What is EC2?", "service":"", "expectedStatus":"ANSWERED"},
+    {"id":"ec2-lambda-comparison", "question":"Compare EC2 with Lambda", "service":"", "expectedStatus":"ANSWERED"},
     {"id":"absent-product", "question":"What is the AWS QuasarDB quantum replication limit on Venus?", "service":"", "expectedStatus":"INFORMATION_NOT_AVAILABLE"},
     {"id":"live-state", "question":"What is the current outage status of S3 right now?", "service":"S3", "expectedStatus":"INFORMATION_NOT_AVAILABLE"},
     {"id":"region-scope", "question":"Can I use this feature in this region?", "service":"S3", "region":"us-east-1", "expectedStatus":"CLARIFICATION_REQUIRED"}

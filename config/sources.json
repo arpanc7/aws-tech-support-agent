@@ -554,6 +554,12 @@
       "localFile": null
     },
     {
+      "id": "lambda-service-overview-bd37f9e2",
+      "service": "LAMBDA",
+      "url": "https://docs.aws.amazon.com/lambda/latest/dg/welcome.html",
+      "localFile": null
+    },
+    {
       "id": "lambda-troubleshooting-invocation-f4f7dde0",
       "service": "LAMBDA",
       "url": "https://docs.aws.amazon.com/lambda/latest/dg/troubleshooting-invocation.html",

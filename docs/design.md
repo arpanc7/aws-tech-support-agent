@@ -53,7 +53,7 @@ LangChain4j core supplies prompt templates, request objects, response schemas, a
 flowchart TD
     A[Validate request and pin corpus] --> B{Validated exact cache?}
     B -->|yes| Z[Return cached response]
-    B -->|no| S[Resolve explicit or single named service scope]
+    B -->|no| S[Resolve explicit or all named service scopes]
     S --> C[Embed question with Nomic]
     C --> D[Hybrid vector + lexical retrieval]
     D --> E[Budget up to 6 passages]
@@ -72,7 +72,7 @@ flowchart TD
     O --> P[Cache and return buffered response]
 ```
 
-The search branch can run only once and accepts at most three query strings. The model cannot request another planning step after search. Java applies the user's explicit service filter to every query. If the filter is empty and the current question names exactly one supported service, Java applies that inferred scope instead. Questions naming zero or multiple supported services remain unscoped. Follow-up embeddings are batched, Java executes only the existing local repository method, and all work shares the original 60-second deadline.
+The search branch can run only once and accepts at most three query strings. The model cannot request another planning step after search. Java applies the user's explicit service filter to every query. If the filter is empty, Java runs initial retrieval independently for every supported service named in the current question and interleaves those rankings before the six-passage budget; a question with no named service remains global. Follow-up embeddings are batched, Java executes only the existing local repository method, and all work shares the original 60-second deadline.
 
 A normal answered miss uses one Nomic call and three Qwen calls: research decision, answer draft, and grounding review. `SEARCH_MORE` adds one batched Nomic call and up to three database searches, but no extra Qwen planning loop. Exact answer hits skip inference. Failures do not trigger automatic repair or model retries.
 
@@ -81,6 +81,7 @@ A normal answered miss uses one Nomic call and three Qwen calls: research decisi
 - The answer stage receives only the user question and budgeted evidence text with temporary aliases such as `E1`.
 - Each of at most six claims must cite one to three supplied aliases. Unknown, duplicate, empty, or uncited claims are rejected.
 - The grounding stage receives only the draft and the passages that draft cites. `UNSUPPORTED` or `UNCERTAIN` rejects the complete answer.
+- For a bare named-service comparison, Java keeps only claims citing every named service before grounding review, so individually true one-sided tangents cannot replace the comparison.
 - Java maps aliases to stored chunk IDs, rechecks the active corpus and revocation epoch, and creates citation IDs and approved `docs.aws.amazon.com` URLs.
 - The UI shows synthesized claims and the exact stored citation quote separately.
 - No unchecked token is streamed or cached. Missing or uncertain evidence returns “Information is not available in the local documentation.”

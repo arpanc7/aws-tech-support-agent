@@ -173,13 +173,30 @@ public class AnswerQuestion {
         .matches(
             "(?is).*\\b(current outage|live status|right now|today.s price|latest price|my account balance)\\b.*"))
       return empty(Answer.unavailable("INSUFFICIENT_EVIDENCE"));
-    String retrievalService = retrievalService(question);
-    float[] vector = embeddings(List.of(question.retrievalText()), profile, deadline).getFirst();
+    List<String> retrievalServices = retrievalServices(question);
+    List<String> initialScopes = retrievalServices.isEmpty() ? List.of("") : retrievalServices;
+    List<String> scopedQueries =
+        initialScopes.stream()
+            .map(
+                service ->
+                    initialScopes.size() > 1
+                        ? question.retrievalText() + " " + service + " service overview"
+                        : question.retrievalText())
+            .toList();
+    List<String> queries =
+        java.util.stream.Stream.concat(
+                java.util.stream.Stream.of(question.retrievalText()), scopedQueries.stream())
+            .distinct()
+            .toList();
+    List<float[]> queryVectors = embeddings(queries, profile, deadline);
+    Map<String, float[]> vectors = new HashMap<>();
+    for (int i = 0; i < queries.size(); i++) vectors.put(queries.get(i), queryVectors.get(i));
+    float[] vector = vectors.get(question.retrievalText());
     String scope =
         Hashes.sha256(
             generation.id()
                 + profile.answerProfile()
-                + retrievalService
+                + serialize(retrievalServices)
                 + serialize(question.previousQuestions()));
     List<String> ids = retrieval.getIfPresent(key);
     boolean semanticUsed = false;
@@ -195,20 +212,40 @@ public class AnswerQuestion {
       ids = similar.map(Candidates::ids).orElse(List.of());
       semanticUsed = !ids.isEmpty();
     }
-    List<Evidence> ranked =
-        repository.retrieve(generation, question.retrievalText(), retrievalService, vector, ids);
+    List<String> candidateIds = ids;
+    List<List<Evidence>> scopedRankings = new ArrayList<>();
+    for (int i = 0; i < initialScopes.size(); i++) {
+      String scopedQuery = scopedQueries.get(i);
+      List<Evidence> serviceRanking =
+          repository.retrieve(
+              generation,
+              scopedQuery,
+              initialScopes.get(i),
+              vectors.get(scopedQuery),
+              candidateIds);
+      scopedRankings.add(
+          initialScopes.size() > 1 ? promoteOverview(serviceRanking) : serviceRanking);
+    }
+    List<Evidence> ranked = mergeRankings(scopedRankings);
     // A semantic hint must not narrow the only retrieval view. Merge it with one full retrieval
     // before any model decision; this adds a cheap database read rather than another Qwen loop.
     if (semanticUsed) {
-      List<Evidence> full =
-          repository.retrieve(
-              generation, question.retrievalText(), retrievalService, vector, List.of());
+      List<List<Evidence>> fullRankings = new ArrayList<>();
+      for (int i = 0; i < initialScopes.size(); i++) {
+        String scopedQuery = scopedQueries.get(i);
+        List<Evidence> serviceRanking =
+            repository.retrieve(
+                generation, scopedQuery, initialScopes.get(i), vectors.get(scopedQuery), List.of());
+        fullRankings.add(
+            initialScopes.size() > 1 ? promoteOverview(serviceRanking) : serviceRanking);
+      }
+      List<Evidence> full = mergeRankings(fullRankings);
       ranked = mergeRankings(List.of(ranked, full));
     }
     List<Evidence> evidence = budget(ranked, question);
     Cached result =
         researchAndRender(
-            question, generation, profile, retrievalService, evidence, semanticUsed, deadline);
+            question, generation, profile, retrievalServices, evidence, semanticUsed, deadline);
     if (result.answer().status().equals("ANSWERED")) {
       List<String> candidates = ranked.stream().limit(80).map(Evidence::id).toList();
       retrieval.put(key, candidates);
@@ -281,7 +318,7 @@ public class AnswerQuestion {
       Question question,
       Generation generation,
       ModelProfile profile,
-      String retrievalService,
+      List<String> retrievalServices,
       List<Evidence> evidence,
       boolean semanticUsed,
       Deadline deadline) {
@@ -302,7 +339,8 @@ public class AnswerQuestion {
         rankings.add(evidence);
         for (int i = 0; i < decision.searches().size(); i++) {
           SearchRequest search = decision.searches().get(i);
-          String service = retrievalService.isEmpty() ? search.service() : retrievalService;
+          String service =
+              retrievalServices.size() == 1 ? retrievalServices.getFirst() : search.service();
           rankings.add(
               repository.retrieve(generation, search.query(), service, vectors.get(i), List.of()));
         }
@@ -327,6 +365,8 @@ public class AnswerQuestion {
     AnswerDraft draft = model.answer(question, evidence, deadline);
     if (draft.decision().equals("UNAVAILABLE") && draft.claims().isEmpty())
       return empty(Answer.unavailable("ANSWER_REJECTED"));
+    draft = retainGenericComparisonClaims(question, draft, evidence);
+    if (draft.claims().isEmpty()) return empty(Answer.unavailable("COMPARISON_UNSUPPORTED"));
     if (!validDraft(draft, evidence)) return empty(Answer.unavailable("VALIDATION_FAILED"));
     Set<String> citedIds = new LinkedHashSet<>();
     draft.claims().forEach(claim -> citedIds.addAll(claim.evidenceIds()));
@@ -381,26 +421,82 @@ public class AnswerQuestion {
   }
 
   /**
-   * Uses one explicitly named supported service as the retrieval scope when no filter was selected.
-   * Multiple service names intentionally remain unscoped so cross-service questions keep all
-   * relevant evidence. Only the current question is inspected; history cannot silently constrain a
-   * new topic.
+   * Returns the explicit filter or every supported service named in the current question.
+   *
+   * <p>Multiple names produce independent retrieval rankings that are interleaved before budgeting,
+   * so comparison questions receive evidence for each service. Only the current question is
+   * inspected; history cannot silently constrain a new topic.
    */
-  public static String retrievalService(Question question) {
-    if (!question.filters().service().isEmpty()) return question.filters().service();
+  public static List<String> retrievalServices(Question question) {
+    if (!question.filters().service().isEmpty()) return List.of(question.filters().service());
     String upper = question.question().toUpperCase(Locale.ROOT);
-    List<String> mentioned =
-        Types.SERVICES.stream()
+    return Types.SERVICES.stream()
+        .filter(
+            service ->
+                java.util.regex.Pattern.compile(
+                        "(?<![A-Z0-9])" + java.util.regex.Pattern.quote(service) + "(?![A-Z0-9])")
+                    .matcher(upper)
+                    .find())
+        .sorted(Comparator.comparingInt(upper::indexOf))
+        .toList();
+  }
+
+  /**
+   * Places canonical “What is …?” passages first for cross-service comparison evidence. Repository
+   * rank is preserved within the overview and non-overview partitions.
+   */
+  public static List<Evidence> promoteOverview(List<Evidence> ranking) {
+    return java.util.stream.Stream.concat(
+            ranking.stream().filter(AnswerQuestion::isOverview),
+            ranking.stream().filter(evidence -> !isOverview(evidence)))
+        .toList();
+  }
+
+  private static boolean isOverview(Evidence evidence) {
+    return evidence.title().toLowerCase(Locale.ROOT).startsWith("what is ")
+        && evidence.heading().equals(evidence.title());
+  }
+
+  /**
+   * Removes one-sided tangents from a generic service-comparison draft.
+   *
+   * <p>A question containing additional requested dimensions is left unchanged. For a bare
+   * comparison, every retained claim must cite evidence from every named service. This is a
+   * deterministic relevance guard because the lightweight reviewer can accept individually true
+   * details that do not actually perform the requested comparison.
+   */
+  public static AnswerDraft retainGenericComparisonClaims(
+      Question question, AnswerDraft draft, List<Evidence> evidence) {
+    List<String> services = retrievalServices(question);
+    if (services.size() < 2 || !isGenericComparison(question, services)) return draft;
+    Map<String, String> evidenceServices = new HashMap<>();
+    evidence.forEach(item -> evidenceServices.put(item.id(), item.service()));
+    List<DraftClaim> retained =
+        draft.claims().stream()
             .filter(
-                service ->
-                    java.util.regex.Pattern.compile(
-                            "(?<![A-Z0-9])"
-                                + java.util.regex.Pattern.quote(service)
-                                + "(?![A-Z0-9])")
-                        .matcher(upper)
-                        .find())
+                claim -> {
+                  Set<String> citedServices =
+                      claim.evidenceIds().stream()
+                          .map(evidenceServices::get)
+                          .filter(Objects::nonNull)
+                          .collect(java.util.stream.Collectors.toSet());
+                  return citedServices.containsAll(services);
+                })
             .toList();
-    return mentioned.size() == 1 ? mentioned.getFirst() : "";
+    return new AnswerDraft(draft.decision(), retained);
+  }
+
+  private static boolean isGenericComparison(Question question, List<String> services) {
+    String remainder = question.question().toUpperCase(Locale.ROOT);
+    for (String service : services)
+      remainder =
+          remainder.replaceAll(
+              "(?<![A-Z0-9])" + java.util.regex.Pattern.quote(service) + "(?![A-Z0-9])", " ");
+    remainder =
+        remainder
+            .replaceAll("(?<![A-Z0-9])(COMPARE|WITH|AND|VS|VERSUS|TO|AWS|AMAZON)(?![A-Z0-9])", " ")
+            .replaceAll("[^A-Z0-9]", "");
+    return remainder.isEmpty();
   }
 
   /** Checks draft size and resolves every model-selected ID against supplied evidence. */

@@ -20,7 +20,7 @@ public final class Types {
       Set.of("IAM", "S3", "EC2", "VPC", "LAMBDA", "CLOUDWATCH");
   public static final String UNAVAILABLE =
       "Information is not available in the local documentation.";
-  public static final String POLICY_VERSION = "bounded-agent-v1:grounded-synthesis-v1:retrieval-v4";
+  public static final String POLICY_VERSION = "bounded-agent-v1:grounded-synthesis-v1:retrieval-v8";
 
   /**
    * Restricts retrieval scope; null fields become empty strings and service names become uppercase.

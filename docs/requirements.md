@@ -51,7 +51,7 @@ Initial exclusions: AWS SDK calls or account access, shell execution, autonomous
 | B-01 | Network access for setup/refresh must be separate from the answer path. Once dependencies and models are installed, queries MUST use local resources only. |
 | B-02 | Every published document MUST retain canonical URL, title, service, content hash, fetch time, and corpus generation. Unknown source version/date MUST stay unknown. |
 | B-03 | Ingestion MUST be repeatable and resumable. Failed or incomplete refreshes MUST NOT replace a healthy active corpus. |
-| B-04 | Retrieval MUST combine semantic retrieval with lexical matching for AWS error codes, API names, and identifiers. Explicit service/version filters MUST apply before evidence selection. When no service filter is selected and the current question names exactly one supported service, Java MUST use that service as the retrieval scope; zero or multiple service names remain unscoped. |
+| B-04 | Retrieval MUST combine semantic retrieval with lexical matching for AWS error codes, API names, and identifiers. Explicit service/version filters MUST apply before evidence selection. With no service filter, Java MUST retrieve each supported service named in the current question independently and interleave the rankings before evidence budgeting. Questions naming no supported service use global retrieval. |
 | B-05 | Evidence sufficiency MUST be assessed before answering. A nearest neighbor, high similarity, valid JSON, or model confidence statement is not proof of support. |
 | B-06 | An answer MUST pass output-schema, source-integrity, and evidence-support checks. Missing, contradictory, or uncertain support MUST result in abstention. |
 | B-07 | Unchecked tokens MUST NOT be streamed to the user. Only a validated final response may be displayed or cached. |
@@ -69,6 +69,7 @@ Initial exclusions: AWS SDK calls or account access, shell execution, autonomous
 | B-19 | The research decision MUST be one of answer, search more, clarify, or unavailable. Search-more may contain one to three normalized local-corpus queries and may execute only once per request. |
 | B-20 | Java, not the model or LangChain4j, MUST execute retrieval. Model output cannot select a network destination, SQL, shell command, AWS API, or arbitrary tool. |
 | B-21 | A synthesized answer MUST contain at most six claims. Every claim MUST cite one to three evidence aliases supplied to the model; Java MUST map aliases to active stored chunks and reject unknown or uncited claims. |
+| B-22 | A bare comparison between named supported services MUST retain only claims directly citing evidence from every named service. Service-specific tangents MUST NOT replace the requested comparison. Questions requesting additional dimensions remain subject to the normal complete-answer grounding policy. |
 
 ## 5. Grounding contract and its limits
 

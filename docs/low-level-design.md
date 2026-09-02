@@ -95,7 +95,7 @@ The same absolute **Deadline** flows through embedding, retrieval, all three Qwe
 - SEARCH_MORE requires one to three distinct nonblank queries.
 - Each query is normalized and capped at 1,000 characters.
 - An optional service must be in the supported-service allowlist. A user's explicit service filter overrides it.
-- Before initial retrieval, `AnswerQuestion.retrievalService` uses the explicit filter or infers a scope only when the current question names exactly one supported service. It does not infer from history, and zero or multiple names remain unscoped. The resolved scope also overrides a model-proposed follow-up service.
+- Before initial retrieval, `AnswerQuestion.retrievalServices` uses the explicit filter or finds every supported service named in the current question. It does not infer from history. Named-service rankings are retrieved independently and interleaved; zero names use one global ranking. A single resolved scope also overrides a model-proposed follow-up service.
 
 **AnswerDraft** contains ANSWER or UNAVAILABLE:
 
@@ -122,13 +122,15 @@ Nomic uses /api/embed, truncate=false, and the pinned 768-dimensional profile. M
 
 ## Retrieval and evidence assembly
 
-PostgreSQL returns dense and English lexical rankings from the pinned generation, resolved service scope, and nonrevoked sources. Java combines them with reciprocal-rank fusion and exact identifier matches. It applies the configured cosine floor, removes duplicate text, takes up to six passages, and enforces the 4,500-evidence-token budget. The six-passage cap limits three serial Qwen prompt costs while still permitting one distinct source per maximum answer claim.
+PostgreSQL returns dense and English lexical rankings from the pinned generation, each resolved service scope, and nonrevoked sources. For multiple named services, Java batches the original and service-focused query embeddings, promotes the canonical passage whose title and heading both begin with `What is`, and round-robin interleaves service rankings. Within each ranking, PostgreSQL uses reciprocal-rank fusion and exact identifier matches. Java then applies the configured cosine floor, removes duplicate text, takes up to six passages, and enforces the 4,500-evidence-token budget. The six-passage cap limits three serial Qwen prompt costs while still permitting one distinct source per maximum answer claim.
 
 A similar-query cache contains candidate IDs, never a final semantic answer. The current request still performs a full retrieval and merges it with reusable candidates. Follow-up results are interleaved with initial results so one query cannot consume the entire budget. All sources remain in the original pinned generation.
 
 ## Rendering and citations
 
 For a supported draft, Java keeps only cited evidence, verifies that it remains active, assigns response-local IDs such as C1, and builds citations from stored metadata. Claim.text is synthesized prose. Citation.quote is the exact stored chunk text. The browser renders these separately and uses textContent; it only opens HTTPS links on docs.aws.amazon.com.
+
+For a bare comparison such as `Compare EC2 with Lambda`, Java retains only claims whose cited evidence covers every named service. This removes model-written one-sided tangents after generation but before grounding review and rendering. If no comparative claim remains, the request abstains. A question with an additional requested dimension is not treated as a bare comparison.
 
 The response uses answerMode=GROUNDED_SYNTHESIS. An unsupported result has no claims or citations and uses the fixed unavailable message. Clarification and dependency failures remain separate statuses.
 

@@ -1,17 +1,27 @@
 # Implementation and verification status
 
-Updated: 2026-09-01. The user authorized the local demo, LangChain4j integration, and bounded Agentic RAG workflow. This is **not a production release approval or a zero-hallucination claim**.
+Updated: 2026-09-02. The user authorized the local demo, LangChain4j integration, and bounded Agentic RAG workflow. This is **not a production release approval or a zero-hallucination claim**.
 
 ## Delivered
 
 - Java 21 / Spring Boot application with domain/port boundaries, PostgreSQL adapters, Flyway migrations, operator commands, health, metrics, and a static chat UI.
 - Native, local-only Ollama: Qwen3 4B Q4_K_M and Nomic Embed Text v1.5. Runtime/model/tokenizer artifacts are pinned. Qwen was observed loading all 37 layers onto Metal.
-- 121 downloaded official pages, six service quotas satisfied, 1,338 embedded passages. Generation: `26b148e5-f1d0-4ba6-b147-e7b064eff68b`.
+- 122 downloaded official pages, six service quotas satisfied, 1,339 embedded passages. Generation: `16f7e856-169c-432b-b45e-76db10d980b3`.
 - HTML snapshots with checksums, structural extraction, tokenizer-based budgets, embedding checkpoints, hybrid exact-vector/lexical/identifier retrieval, atomic publication, rollback and persistent source revocation.
 - Bounded research decisions, one optional local-search round, cited grounded synthesis, an independent grounding pass using the same local model, conservative abstention, no unchecked streaming, and safe text rendering with inspectable exact evidence quotes.
 - Memory-bounded exact/embedding/retrieval caches and semantic candidate reuse with revalidation. Scope/history/profile/generation keys, request coalescing, bounded admission, deadlines and model quarantine on uncertain completion.
 - Opt-in daily refresh with persistent retry backoff, previous-corpus retention on failure, freshness status, snapshot integrity checks, backup tooling and a restore runbook.
 - OpenAPI contract, reproducible setup helpers, Maven wrapper, CI configuration, dependency-update configuration, and a generated CycloneDX SBOM (`target/bom.json` / `target/bom.xml`). An SBOM is an inventory, not a vulnerability assessment.
+
+## Cross-service comparison regression verification (2026-09-02)
+
+- Reproduced `CLARIFICATION_REQUIRED` for “Compare EC2 with Lambda” with **All supported services** selected. Multi-service questions used one global ranking, and the corpus did not contain the Lambda service overview.
+- Java now retrieves every explicitly named supported service independently. For cross-service comparisons it uses service-focused queries, promotes each canonical `What is …?` passage, and round-robin interleaves the rankings before the six-passage budget. Questions naming no service retain global retrieval; an explicit UI filter still wins.
+- Added the official `What is AWS Lambda?` page and atomically published generation `16f7e856` with 122 documents and 1,339 passages. All 122 sources completed; compatible checkpoints were reused.
+- The answer and grounding policies now require direct cited support for both sides of a comparison. For a bare service comparison, Java removes one-sided tangents unless each retained claim cites every named service; requests with additional dimensions are not rewritten by this guard.
+- Unit/policy/security/architecture/model-contract/local-metrics tests: **51 passed**; PostgreSQL integration tests: **6 passed**; total: **57**, none skipped.
+- Final real-model smoke: **10/10 passed**. The definitive uncached comparison returned one concise EC2-versus-Lambda claim with both canonical overview citations in 13.555 seconds; the subsequent final-suite comparison was an exact hit in 13 ms. Other answered misses took 11.576–25.661 seconds. Results: `.cache/bounded-agent/smoke-report-cross-service-final.json`; definitive response: `.cache/bounded-agent/cross-service-final-v4.json`.
+- The in-app browser displayed 122 documents/1,339 passages and rendered the grounded comparison with the EC2 and Lambda overview links under the all-services scope. Readiness remained UP.
 
 ## EC2 definition regression verification (2026-09-01)
 
