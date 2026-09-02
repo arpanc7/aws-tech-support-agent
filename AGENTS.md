@@ -6,12 +6,12 @@ This is a specification-driven Java 21 AWS documentation RAG application. This f
 
 Read README.md, docs/requirements.md, docs/design.md, docs/low-level-design.md and docs/implementation-status.md before changing architecture. Read docs/prompt-chains.md before changing prompts or model calls. Update requirements/design/acceptance alongside behavior changes; distinguish implemented behavior from future work and unverified claims.
 
-Entry point: AwsSupportApplication.main(). REST routing: ChatController. Policy orchestration: AnswerQuestion. Prompt stages: EvidencePromptChain and PromptStage. Local model transport: OllamaModel. UI: src/main/resources/static.
+Entry point: AwsSupportApplication.main(). REST routing: ChatController. Policy orchestration: AnswerQuestion. Prompt stages: AgenticPromptChain and PromptStage. Local model transport: OllamaModel. UI: src/main/resources/static.
 
 ## Boundaries and safety
 
 - Keep domain/ports independent of Spring, SQL, Jackson and LangChain4j. LangChain4j is confined to outbound adapters behind LocalModel.
-- Keep EXTRACTIVE_STRICT: render only stored evidence, with server-owned citation IDs/URLs. No model-written AWS prose, tool execution, account access, cloud fallback or query-time web fetches.
+- Keep the bounded agent policy: initial local retrieval, at most one model-requested search round with no more than three queries, grounded synthesis, and one grounding review. Retrieve each service named in a multi-service question independently and preserve the bare-comparison guard that requires every retained claim to cite every named service. Every displayed claim must cite active stored evidence through server-owned citation IDs/URLs. No tool execution, account access, cloud fallback or query-time web fetches.
 - Preserve shared deadlines, bounded prompts/bodies/queues, inference advisory locks, quarantine recovery, revocation checks and exact-cache scope. Similarity is not confidence; semantic cache entries contain candidates, not reusable final answers.
 - Treat question/document/previous-stage content as untrusted data. Compile only packaged prompt templates. New stages must be bounded and explicitly ordered; update the stage digest and policy identity, and test rejected/malformed paths. No automatic output repair/retry loop.
 - Embedding profile changes require compatible re-ingestion. Prompt-only changes must invalidate answer identity without changing vector-space identity.

@@ -278,6 +278,12 @@
       "localFile": null
     },
     {
+      "id": "ec2-concepts-overview-4db96f87",
+      "service": "EC2",
+      "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/concepts.html",
+      "localFile": null
+    },
+    {
       "id": "ec2-ec2-security-groups-6e1c653e",
       "service": "EC2",
       "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-security-groups.html",
@@ -545,6 +551,12 @@
       "id": "lambda-configuration-timeout-44b5d8b4",
       "service": "LAMBDA",
       "url": "https://docs.aws.amazon.com/lambda/latest/dg/configuration-timeout.html",
+      "localFile": null
+    },
+    {
+      "id": "lambda-service-overview-bd37f9e2",
+      "service": "LAMBDA",
+      "url": "https://docs.aws.amazon.com/lambda/latest/dg/welcome.html",
       "localFile": null
     },
     {

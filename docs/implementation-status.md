@@ -1,22 +1,54 @@
 # Implementation and verification status
 
-Updated: 2026-08-31. The user authorized the local demo and LangChain4j integration. This is **not a production release approval or a zero-hallucination claim**.
+Updated: 2026-09-02. The user authorized the local demo, LangChain4j integration, and bounded Agentic RAG workflow. This is **not a production release approval or a zero-hallucination claim**.
 
 ## Delivered
 
 - Java 21 / Spring Boot application with domain/port boundaries, PostgreSQL adapters, Flyway migrations, operator commands, health, metrics, and a static chat UI.
 - Native, local-only Ollama: Qwen3 4B Q4_K_M and Nomic Embed Text v1.5. Runtime/model/tokenizer artifacts are pinned. Qwen was observed loading all 37 layers onto Metal.
-- 120 downloaded official pages, six service quotas satisfied, 1,330 embedded passages. Generation: `21fa20b5-5b91-49ae-9c1e-b146dc23c0a0`.
+- 122 downloaded official pages, six service quotas satisfied, 1,339 embedded passages. Generation: `16f7e856-169c-432b-b45e-76db10d980b3`.
 - HTML snapshots with checksums, structural extraction, tokenizer-based budgets, embedding checkpoints, hybrid exact-vector/lexical/identifier retrieval, atomic publication, rollback and persistent source revocation.
-- Strict excerpt-only answers, evidence ID/schema checks, independent coverage pass using the same local model, conservative abstention, no unchecked streaming, and safe text rendering.
+- Bounded research decisions, one optional local-search round, cited grounded synthesis, an independent grounding pass using the same local model, conservative abstention, no unchecked streaming, and safe text rendering with inspectable exact evidence quotes.
 - Memory-bounded exact/embedding/retrieval caches and semantic candidate reuse with revalidation. Scope/history/profile/generation keys, request coalescing, bounded admission, deadlines and model quarantine on uncertain completion.
 - Opt-in daily refresh with persistent retry backoff, previous-corpus retention on failure, freshness status, snapshot integrity checks, backup tooling and a restore runbook.
 - OpenAPI contract, reproducible setup helpers, Maven wrapper, CI configuration, dependency-update configuration, and a generated CycloneDX SBOM (`target/bom.json` / `target/bom.xml`). An SBOM is an inventory, not a vulnerability assessment.
 
-## LangChain4j integration verification (2026-08-31)
+## Cross-service comparison regression verification (2026-09-02)
 
-- Added pinned `langchain4j-core:1.19.0` with reusable PromptStage and typed EvidencePromptChain operations. A custom guarded ChatModel preserves existing Ollama raw HTTP behavior. No automatic agent, RAG, memory, tool or repair/retry subsystem is enabled.
-- Moved policy prompts to packaged resources; added a template/stage digest to answer identity and advanced policy to `extractive-v5:retrieval-v2`. Embedding identity, database schema, corpus generation and strict excerpt rendering remain unchanged.
+- Reproduced `CLARIFICATION_REQUIRED` for “Compare EC2 with Lambda” with **All supported services** selected. Multi-service questions used one global ranking, and the corpus did not contain the Lambda service overview.
+- Java now retrieves every explicitly named supported service independently. For cross-service comparisons it uses service-focused queries, promotes each canonical `What is …?` passage, and round-robin interleaves the rankings before the six-passage budget. Questions naming no service retain global retrieval; an explicit UI filter still wins.
+- Added the official `What is AWS Lambda?` page and atomically published generation `16f7e856` with 122 documents and 1,339 passages. All 122 sources completed; compatible checkpoints were reused.
+- The answer and grounding policies now require direct cited support for both sides of a comparison. For a bare service comparison, Java removes one-sided tangents unless each retained claim cites every named service; requests with additional dimensions are not rewritten by this guard.
+- Unit/policy/security/architecture/model-contract/local-metrics tests: **51 passed**; PostgreSQL integration tests: **6 passed**; total: **57**, none skipped.
+- Final real-model smoke: **10/10 passed**. The definitive uncached comparison returned one concise EC2-versus-Lambda claim with both canonical overview citations in 13.555 seconds; the subsequent final-suite comparison was an exact hit in 13 ms. Other answered misses took 11.576–25.661 seconds. Results: `.cache/bounded-agent/smoke-report-cross-service-final.json`; definitive response: `.cache/bounded-agent/cross-service-final-v4.json`.
+- The in-app browser displayed 122 documents/1,339 passages and rendered the grounded comparison with the EC2 and Lambda overview links under the all-services scope. Readiness remained UP.
+- Both GitHub Actions runs for commit `a338fd3` passed on Ubuntu using Testcontainers. A 50 ms timeout contract test was made deterministic after one of two concurrent runs expired during test startup before dispatch; the revised test proves the request was sent and then exceeded its two-second deadline.
+
+## EC2 definition regression verification (2026-09-01)
+
+- Reproduced the website returning `CLARIFICATION_REQUIRED` for “What is EC2?” with **All supported services** selected. Initial all-service retrieval lacked a deterministic explicit-service scope, and the manifest omitted the EC2 overview page.
+- At this stage, `AnswerQuestion` applied an explicit filter or inferred exactly one supported service named in the current question. It did not infer from history; zero or multiple names remained unscoped. The cross-service change above supersedes that multi-service behavior.
+- Added the official `What is Amazon EC2?` concepts page and atomically published a 121-document/1,338-passage generation. All 121 sources completed; compatible prior embedding checkpoints were reused.
+- Added unit regressions for inferred, explicit, and multi-service scope plus the exact no-filter EC2 real-model smoke case. Unit/policy/security/architecture/model-contract/local-metrics tests: **48 passed**; PostgreSQL integration tests: **6 passed**; total: **54**, none skipped.
+- Real-model smoke: **9/9 passed**. The EC2 definition returned `ANSWERED` in 24.016 seconds and cited the locally stored `What is Amazon EC2?` overview. Other cache-miss answers took 17.044–31.051 seconds in this run; the exact cache hit took 8 ms. These observations miss the proposed warm-latency target and are not p95 measurements. Results: `.cache/bounded-agent/smoke-report-ec2-fix.json`.
+- The in-app browser reloaded the updated corpus counts and submitted “What is EC2?” with **All supported services** selected. It rendered the grounded definition and inspectable AWS citations from generation `26b148e5`. After the final patched-process restart, an uncached browser request completed with evidence checked in 11.0 seconds.
+- GitHub reported a moderate jsoup cleaner advisory after the push. The direct dependency was updated from 1.21.2 to the first patched version, 1.23.1, and the full verification suite was rerun.
+
+## Bounded Agentic RAG verification (2026-08-31)
+
+- Replaced the extractive selection/coverage flow with three explicit `AgenticPromptChain` stages: research decision, cited answer draft, and grounding review.
+- A research decision can request one through three local-corpus queries. Java batches their Nomic embeddings, executes at most one additional retrieval round in the pinned generation, and does not expose arbitrary tools or another planning loop.
+- Java validates action consistency, query bounds, service filters, every claim/evidence alias, source state, and server-built citations. The UI now separates synthesized claims from exact stored evidence.
+- Unit/policy/security/architecture/model-contract/local-metrics tests: **45 passed**. PostgreSQL integration tests: **6 passed** in an isolated native PostgreSQL schema. Total: **51**, none skipped.
+- Updated real-model smoke: **8/8 passed** against Qwen3 4B and Nomic v1.5 with the 120-page/1,330-passage corpus. Answered cache misses completed in 8.1–18.9 seconds in the final warm run; the exact cache hit completed in 13 ms. A browser cold-model check completed in 30.0 seconds. Results: `.cache/bounded-agent/smoke-report-six-passages.json`.
+- The real run exposed an Ollama 0.33 grammar limit for a nested 2,000-character repetition. The response schema now leaves that string unbounded at the transport layer and retains the 2,000-character Java check. Deterministic 4xx/invalid responses now release model health; only uncertain completion and server failures quarantine it.
+- The in-app browser loaded the UI, reported 120 documents/1,330 passages, submitted an S3 question, rendered GROUNDED_SYNTHESIS claims, opened server-owned AWS documentation links, and exposed exact stored evidence in the provenance panel with no browser console errors. Readiness was UP.
+- Local operations now write Spring logs and an atomic privacy-safe `rag.*` metrics JSON snapshot under the system temporary directory. Model counters distinguish embedding, research, answer, and grounding success/rejection/failure.
+
+## Historical LangChain4j migration verification (2026-08-31)
+
+- Added pinned `langchain4j-core:1.19.0` with reusable PromptStage and the then-current typed extractive operations. A custom guarded ChatModel preserved existing Ollama raw HTTP behavior. This table records the completed migration baseline before the bounded-agent change above.
+- Moved policy prompts to packaged resources and added a template/stage digest to answer identity. Embedding identity, database schema, and corpus generation remained unchanged.
 - Added high-level component/ingestion diagrams, low-level class/sequence/ER diagrams, a prompt extension guide, platform matrix and root AGENTS.md. Corrected earlier design descriptions of unimplemented tables, lifecycle states and scheduling mechanisms.
 - The product is not M1-specific. Mac ARM64/16 GB remains the reference environment. Linux/WSL2/other hosts have provisioning guidance but have not passed full native-library, model, performance, security and offline validation.
 
@@ -47,7 +79,7 @@ Post-migration smoke observations:
 
 These are single developer probes, not held-out quality or p95 evidence. The separate comparison trace ran after smoke testing and benefited from runtime caches; its timing is not an optimization claim. No fresh corpus download or restore audit was performed for this prompt-only change. Original ingestion/restore results below remain historical evidence.
 
-The first sandboxed test attempt failed because Mockito could not attach its test JVM and local HTTP access was restricted. Re-running with the required local process/network permissions passed; no test assertions were weakened. Docker remains unavailable on this host, so the Docker/remote-CI path is still unverified.
+The first sandboxed test attempt failed because Mockito could not attach its test JVM and local HTTP access was restricted. Re-running with the required local process/network permissions passed; no test assertions were weakened. Docker remains unavailable on this Mac, but the current branch has since passed both remote GitHub Actions jobs with Testcontainers on Ubuntu.
 
 ## Original baseline verification (2026-08-30)
 
@@ -63,7 +95,7 @@ The first sandboxed test attempt failed because Mockito could not attach its tes
 | Browser walkthrough | Rendered corpus counts, S3 service filter, question submission, stored excerpts, citations, provenance, and exact cache-hit metadata |
 | Docker image architecture | Registry manifest confirms Linux arm64 and amd64; multi-platform digest pinned |
 
-The full Docker/Testcontainers path could not run because this Mac's Docker Desktop failed during its own startup. The database integration suite ran against the real native PostgreSQL/pgvector fallback instead. CI is configured to use Testcontainers, but has not run in a remote CI environment.
+At the original baseline, the full Docker/Testcontainers path could not run because this Mac's Docker Desktop failed during its own startup. The database integration suite ran against the real native PostgreSQL/pgvector fallback instead. The current branch has since passed its remote GitHub Actions Testcontainers jobs; the Docker path on this Mac remains unverified.
 
 Original baseline smoke run (`.cache/smoke-report-stable.json`):
 
@@ -85,7 +117,7 @@ These are single observations on this Mac, not p50/p95 measurements. The model w
 - **Native PostgreSQL fallback:** project-local Postgres.app binaries under `.tools/` and data under `data/postgres`; no global Docker settings were changed. Docker Compose remains available for a healthy Docker installation.
 - **Extraction v2:** split long lists at item/child boundaries and tables at rows with repeated headers. Preserve code; reject oversized indivisible examples. Two oversized example pages were replaced by related reference pages while retaining all quotas. The manifest was selected by the implementation agent and validated mechanically, not independently reviewed by a company domain expert.
 - **Retrieval v2:** English stemming/stop-word handling with disjunctive lexical candidates, reciprocal rank fusion, and separate exact-identifier hits. Generic acronyms such as AWS/IAM are excluded from identifier boosts. A regression test covers the Lambda answer being displaced by generic AWS text.
-- **Original answer policy v4 (now v5 with prompt-content identity):** use short, request-local evidence aliases that resolve only to supplied stored IDs and canonical map serialization for reproducible prompts across JVM restarts. Prefer the smallest sufficient excerpt set. Coverage checks evaluate the question actually asked, while still requiring relevant qualifications and complete prerequisites for requested procedures. No synthesized mode is implemented.
+- **Current answer policy:** use request-local evidence aliases that resolve only to supplied stored IDs and canonical map serialization for reproducible prompts. The model may request one bounded additional local search round, then drafts cited claims and performs a separate grounding review. Synthesized prose is enabled with residual same-model validation risk.
 - **Region/version filtering:** supplied region/version values trigger clarification because the baseline corpus cannot reliably establish those scopes. It does not pretend to implement granular regional/version-aware retrieval.
 - **Scheduling:** opt-in while Java runs, not a macOS daemon. Database session locks replace a lease-expiry protocol locally. Batches release model capacity between calls; strict chat-priority scheduling is not implemented.
 - **UI cancellation:** stops waiting without claiming guaranteed server-side inference cancellation. Inference timeouts quarantine the runtime to avoid uncertain concurrent work.
@@ -98,7 +130,7 @@ The local demo is usable; the full production acceptance target in [acceptance.m
 1. Build and independently review the 200-case dataset; measure retrieval coverage, answer usefulness, abstention quality, adversarial behavior and dangerous semantic-neighbor cases on held-out data. Similarity thresholds remain initial settings, not calibrated guarantees.
 2. Expand resilience tests for process death during inference/ingestion, deadline/queue pressure, cancellation, TTL/eviction, publication races, and failure/restart scheduling. The existing suite does not cover every A-01–A-27 scenario.
 3. Measure sustained load, cold/warm p50/p95 and total unified memory; test physically disconnected operation. The app's request path uses local endpoints and local assets, but a full offline network audit was not performed.
-4. Run the pinned Docker path and CI, dependency vulnerability/license review, and a company security review. AWS documentation remains separately owned content and is not redistributed in this source tree.
+4. Validate the pinned Docker path on the reference Mac and keep remote CI green. Complete dependency vulnerability/license review and a company security review. AWS documentation remains separately owned content and is not redistributed in this source tree.
 5. Add company identity, tenant isolation, TLS, secret management, least-privilege migration/runtime roles, distributed capacity management, production observability, HA and independently audited restore procedures before shared deployment.
 
 A same-model second pass is not an independent truth oracle. Verbatim excerpts eliminate model-written factual sentences, but can still be irrelevant, incomplete, maliciously sourced, or stale. Keep these limits visible when demonstrating the system.

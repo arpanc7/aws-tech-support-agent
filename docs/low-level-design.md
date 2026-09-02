@@ -1,183 +1,149 @@
 # Low-level design
 
-Baseline 0.3 · 2026-08-31. Companion to [high-level design](design.md).
+Baseline 0.4 · Updated: 2026-09-02 · Bounded Agentic RAG implementation.
 
-## Entry points and classes
+## Main classes and ports
 
-`AwsSupportApplication.main()` starts Spring. `POST /api/v1/chat` invokes `ChatController.chat()` then `AnswerQuestion.answer()`. Operator commands use the same bootstrap in non-web mode.
-
-```mermaid
+~~~mermaid
 classDiagram
+    class AwsSupportApplication
+    class ChatController
     class AnswerQuestion {
-        +answer(Question) ChatResponse
-        -compute()
-        -budget()
-        -checkAndRender()
+      +answer(ChatRequest) ChatResponse
+      -compute(Question, Deadline) ChatResponse
+      -researchAndRender(Question, List~Evidence~, Deadline) ChatResponse
+      -draftAndRender(Question, List~Evidence~, Deadline) ChatResponse
+      +validDecision(ResearchDecision) boolean
+      +validDraft(AnswerDraft, List~Evidence~) boolean
     }
     class LocalModel {
-        <<interface>>
-        +profile()
-        +embed(inputs, deadline)
-        +select(question, evidence, deadline)
-        +verify(question, evidence, deadline)
+      <<interface>>
+      +embed(List~String~, String, Deadline) List~Vector~
+      +decide(Question, List~Evidence~, Deadline) ResearchDecision
+      +answer(Question, List~Evidence~, Deadline) AnswerDraft
+      +verify(Question, AnswerDraft, List~Evidence~, Deadline) boolean
     }
-    class EvidencePromptChain {
-        +select(question, evidence, model)
-        +verify(question, evidence, model)
-        +digest()
+    class CorpusRepository {
+      <<interface>>
+      +activeCorpus() CorpusState
+      +retrieve(QueryEmbedding, RetrievalRequest) List~Evidence~
+      +evidenceValid(...) boolean
     }
-    class PromptStage {
-        +invoke(model, data, schema)
-        +digest()
-    }
-    class GuardedChatModel {
-        -deadline
-        +doChat(request)
-    }
-    class ChatModel {
-        <<LangChain4j interface>>
-        +chat(request)
-    }
+    class OllamaModel
+    class AgenticPromptChain
+    class PromptStage
+    class PostgresCorpusRepository
+
+    AwsSupportApplication --> ChatController
     ChatController --> AnswerQuestion
     AnswerQuestion --> LocalModel
     AnswerQuestion --> CorpusRepository
     LocalModel <|.. OllamaModel
-    OllamaModel --> EvidencePromptChain
-    EvidencePromptChain --> PromptStage
-    PromptStage --> ChatModel
-    ChatModel <|.. GuardedChatModel
-    GuardedChatModel --> OllamaModel
-    OllamaModel --> DatabaseLocks
-    OllamaModel --> LocalTokenizers
-```
+    CorpusRepository <|.. PostgresCorpusRepository
+    OllamaModel --> AgenticPromptChain
+    AgenticPromptChain --> PromptStage
+~~~
 
-`GuardedChatModel` is a private request-scoped inner class, not a singleton with mutable request state. It closes over the original `Deadline`. Requests require one system message, one text-only user message, a raw JSON schema and no tools. Unsupported shapes fail visibly.
+**AwsSupportApplication.main()** is the process entry point. **ChatController** is the REST entry point for POST /api/v1/chat. Domain records and ports contain no Spring, JDBC, Jackson, or LangChain4j types.
 
-## Successful uncached request
+## Request sequence
 
-```mermaid
+~~~mermaid
 sequenceDiagram
-    participant U as Browser
-    participant A as Controller / AnswerQuestion
-    participant P as PostgreSQL
-    participant M as OllamaModel
-    participant S as LangChain4j stages
-    participant O as Ollama
-    U->>A: POST chat + session/CSRF
-    A->>P: Pin active generation
-    A->>M: Validate model profile
-    M->>O: GET /api/tags
-    A->>A: Cache miss / scope validation
-    A->>M: Embed prefixed query, shared deadline
-    M->>P: Lock inference and mark in-progress
-    M->>O: POST /api/embed
-    O-->>M: 768-dimensional vector
-    M->>P: Restore health and release lock
-    A->>P: Dense + lexical + identifier queries
-    P-->>A: Ranked passages
-    A->>A: Deduplicate / budget up to 8
-    A->>M: select(question, evidence, deadline)
-    M->>S: Selection stage + guarded model
-    S->>M: ChatModel.chat(messages, schema)
-    M->>O: Guarded raw /api/generate
-    O-->>A: Decision and IDs via adapters
-    A->>A: Validate selected IDs
-    A->>M: verify(question, selected, same deadline)
-    M->>S: Coverage stage
-    S->>M: ChatModel.chat(messages, schema)
-    M->>O: Guarded raw /api/generate
-    O-->>A: Coverage verdict via adapters
-    A->>P: Check revocations / epoch
-    A->>A: Copy excerpts, build citations, cache
-    A-->>U: Validated response
-```
+    actor U as User
+    participant C as ChatController
+    participant A as AnswerQuestion
+    participant R as CorpusRepository
+    participant N as Nomic/Ollama
+    participant Q as Qwen/AgenticPromptChain
 
-Both generation calls also acquire the inference lock and transition model health. Repeated lock details are omitted above for readability. No transaction spans an inference call.
+    U->>C: POST /api/v1/chat
+    C->>A: ChatRequest
+    A->>R: active corpus + cache validity
+    alt validated exact answer
+        A-->>C: cached ChatResponse
+    else miss
+        A->>N: embed original retrieval text
+        A->>R: hybrid retrieve
+        A->>Q: decide(question, initial evidence)
+        alt SEARCH_MORE
+            A->>N: batch embed 1-3 search queries
+            loop each bounded query
+                A->>R: hybrid retrieve in pinned generation
+            end
+            A->>A: merge, deduplicate, token-budget
+        else CLARIFY or UNAVAILABLE
+            A-->>C: fail-closed response
+        end
+        A->>Q: answer(question, final evidence)
+        A->>A: validate claim schema and aliases
+        A->>Q: verify(question, draft, cited evidence)
+        A->>R: recheck source/epoch validity
+        A->>A: build server citation IDs and URLs
+        A-->>C: buffered ChatResponse
+    end
+    C-->>U: JSON
+~~~
 
-## Branch and failure rules
+The same absolute **Deadline** flows through embedding, retrieval, all three Qwen stages, and admission. There is no deadline reset. No answer token reaches the browser before the complete response passes validation.
 
-- A valid exact answer-cache hit bypasses inference/retrieval but still checks profile and source state.
-- Unsupported explicit region/version scope clarifies; recognized live-state patterns abstain.
-- No budgeted evidence means no Qwen call. Selection abstention/clarification means no coverage call.
-- Failed reuse of retrieval candidates permits one full retrieval retry; that retry cannot recurse. The original deadline remains in force.
-- Invalid output yields abstention; operational failures yield typed errors. Unknown inference completion quarantines the runtime instead of retrying.
-- Only accepted stored excerpts can be rendered/cached. A subsequent stage cannot make rejected evidence valid without the same deterministic gates.
+## Domain contracts
 
-| Boundary | Contract |
-| --- | --- |
-| Selection | ANSWERABLE/UNAVAILABLE/CLARIFY and at most 3 unique aliases from supplied E1..E8 |
-| Java selection gate | ANSWERABLE requires 1–3 unique known IDs; server resolves actual chunk IDs |
-| Coverage | Only a single SUPPORTED verdict succeeds; unsupported/uncertain/extra fields fail |
-| Qwen request | Raw ChatML, no unchecked streaming, JSON schema, context 8192, output cap 800, seed 42, temperature 0.1 |
-| Validation | Completed, not length-terminated; object JSON with no trailing tokens; local/runtime prompt counts agree within 2 tokens |
-| Rendering | Claim text copied from selected chunk; citation URL, quote and generation built by Java |
+**ResearchDecision** contains an action and search requests:
 
-## Templates and profiles
+- ANSWER, CLARIFY, and UNAVAILABLE require an empty search list.
+- SEARCH_MORE requires one to three distinct nonblank queries.
+- Each query is normalized and capped at 1,000 characters.
+- An optional service must be in the supported-service allowlist. A user's explicit service filter overrides it.
+- Before initial retrieval, `AnswerQuestion.retrievalServices` uses the explicit filter or finds every supported service named in the current question. It does not infer from history. Named-service rankings are retrieved independently and interleaved; zero names use one global ranking. A single resolved scope also overrides a model-proposed follow-up service.
 
-`EvidencePromptChain` loads the selection and coverage policies plus `evidence-user.txt` from `resources/prompts`. The latter substitutes `{{data}}` once with canonical JSON containing the question/history/filters and evidence aliases/service/title/heading/text. It never receives vectors. Template-like input stays literal data.
+**AnswerDraft** contains ANSWER or UNAVAILABLE:
 
-`PromptStage` builds LangChain4j messages and the constrained `ChatRequest`. `GuardedChatModel` translates these to the existing raw formatter. Data angle brackets are escaped so they cannot close ChatML role delimiters. This is one injection defense, not proof of semantic safety.
+- UNAVAILABLE has no claims.
+- ANSWER has one to six nonblank claims.
+- Each claim cites one to three unique stored evidence IDs after alias mapping.
+- Every cited ID must occur in the evidence supplied to the answer stage.
 
-`ModelProfile.embeddingProfile()` remains unchanged. `answerProfile()` includes generator identity, `extractive-v5:retrieval-v2` and the ordered stage/template digest. A prompt-only change therefore invalidates answer reuse without rebuilding embeddings. Each future stage must join the digest and preserve explicit bounds; see [prompt-chains.md](prompt-chains.md).
+Any mismatch throws INVALID_MODEL_OUTPUT and produces no AWS claim. The application never interprets model output as SQL, a URL, a command, or a tool name.
 
-## Cache and concurrency
+## Prompt and model adapter
 
-| Cache | Accounted entry weight | TTL | Contents |
-| --- | ---: | --- | --- |
-| Exact answer | 64 MiB | 30 minutes | Accepted answer + source IDs |
-| Query embedding | 16 MiB | 24 hours | Vector keyed by exact input and embedding profile |
-| Retrieval | 16 MiB | 15 minutes | Candidate IDs for a scoped request |
-| Similar-query candidates | 32 MiB; max 2000 entries | 10 minutes | Scoped vector + candidate IDs, never another query's answer |
+**AgenticPromptChain** loads three packaged policies and the common evidence-user.txt data template:
 
-Caches and request coalescing are process-local. Generation, epoch, policy/prompt identity, filters and history scope exact answers. Five admission slots include coalesced waiters. Advisory locks coordinate ingestion and inference across processes sharing the database, but do not provide distributed admission or strict request priorities.
+1. research-system.txt returns the bounded action and optional searches.
+2. answer-system.txt returns cited claims or unavailable.
+3. grounding-system.txt returns supported, unsupported, or uncertain.
 
-## Database relationships
+Evidence gets request-local aliases. The model sees service, title, heading, and text; it does not see vectors, database credentials, source URLs, or internal citation IDs. The answer stage maps aliases to stored chunk IDs before returning through LocalModel; the grounding stage remaps those IDs to aliases for a self-contained prompt.
 
-```mermaid
-erDiagram
-    CORPUS_GENERATION ||--o{ DOCUMENT : contains
-    DOCUMENT ||--o{ CHUNK : contains
-    CORPUS_GENERATION ||--o| ACTIVE_CORPUS : selected_by
-    CORPUS_GENERATION {
-        uuid id PK
-        text profile
-        text fingerprint
-        text state
-        timestamptz published_at
-    }
-    ACTIVE_CORPUS {
-        boolean singleton PK
-        uuid generation_id FK
-        bigint policy_epoch
-        timestamptz last_complete_check
-        timestamptz next_refresh_attempt
-    }
-    DOCUMENT {
-        uuid generation_id PK,FK
-        text source_id PK
-        text service
-        text url
-        text raw_hash
-        text content_hash
-        text snapshot_path
-    }
-    CHUNK {
-        uuid generation_id PK,FK
-        text id PK
-        text source_id FK
-        text content
-        text embedding_input
-        vector embedding
-        tsvector terms_english
-    }
-```
+**PromptStage** uses LangChain4j PromptTemplate, ChatRequest, ChatModel, and structured response formats. **OllamaModel.GuardedChatModel** translates those objects to the existing raw /api/generate request. It enforces two messages, raw ChatML, Qwen's 8,192-token context, temperature 0.1, seed 42, 800 output tokens, no streaming, response body limits, tokenizer parity, and the remaining shared deadline. Malformed output is rejected without a repair call.
 
-Selected fields are shown; Flyway migrations are authoritative. A chunk is the cited span, with no separate offsets table. Supporting tables: `embedding_checkpoint`, `ingestion_job`, `source_check`, `revoked_source`, `model_health`, and Flyway history.
+Nomic uses /api/embed, truncate=false, and the pinned 768-dimensional profile. Missing embeddings from the original or follow-up query list are batched and individually cached.
 
-Retrieval uses exact vector distance, not HNSW. It combines top 40 cosine matches, top 40 English disjunctive full-text matches, and up to 10 hits per eligible exact identifier. Generic acronyms such as AWS/IAM do not get identifier boosts. Fusion adds `1/(61+rankIndex)` per list, then uses stable ID tie-breaking. The returned similarity field remains cosine similarity, not the fused score or a correctness probability.
+## Retrieval and evidence assembly
 
-## Publication
+PostgreSQL returns dense and English lexical rankings from the pinned generation, each resolved service scope, and nonrevoked sources. For multiple named services, Java batches the original and service-focused query embeddings, promotes the canonical passage whose title and heading both begin with `What is`, and round-robin interleaves service rankings. Within each ranking, PostgreSQL uses reciprocal-rank fusion and exact identifier matches. Java then applies the configured cosine floor, removes duplicate text, takes up to six passages, and enforces the 4,500-evidence-token budget. The six-passage cap limits three serial Qwen prompt costs while still permitting one distinct source per maximum answer claim.
 
-`IngestCorpus.run()` holds the ingestion session lock while fetching, extracting, chunking and checkpointing. `publish()` then locks the active-pointer row, compares fingerprints and inserts the generation/documents/chunks plus active pointer in one transaction. A failed insert rolls everything back. Prompt changes do not require schema migrations or corpus publication.
+A similar-query cache contains candidate IDs, never a final semantic answer. The current request still performs a full retrieval and merges it with reusable candidates. Follow-up results are interleaved with initial results so one query cannot consume the entire budget. All sources remain in the original pinned generation.
 
-See [data lifecycle](data-lifecycle.md), [operations](operations.md) and [acceptance criteria](acceptance.md) for changes, recovery and testing.
+## Rendering and citations
+
+For a supported draft, Java keeps only cited evidence, verifies that it remains active, assigns response-local IDs such as C1, and builds citations from stored metadata. Claim.text is synthesized prose. Citation.quote is the exact stored chunk text. The browser renders these separately and uses textContent; it only opens HTTPS links on docs.aws.amazon.com.
+
+For a bare comparison such as `Compare EC2 with Lambda`, Java retains only claims whose cited evidence covers every named service. This removes model-written one-sided tangents after generation but before grounding review and rendering. If no comparative claim remains, the request abstains. A question with an additional requested dimension is not treated as a bare comparison.
+
+The response uses answerMode=GROUNDED_SYNTHESIS. An unsupported result has no claims or citations and uses the fixed unavailable message. Clarification and dependency failures remain separate statuses.
+
+## Cache, concurrency, and failure behavior
+
+Exact cache keys include normalized question/history/filters, corpus generation, policy epoch, model identities, policy version, and ordered prompt digest. In-flight identical requests may coalesce. Cached responses are returned only after authoritative corpus/source checks.
+
+One application-coordinated inference is active at a time and at most four requests wait. PostgreSQL advisory locks coordinate processes. An uncertain timeout quarantines the model until the runtime is restarted and explicitly reset. There is no automatic model repair, retry, follow-on research loop, web fallback, or hidden chat memory.
+
+## Storage and refresh
+
+Flyway owns the schema. Generations, documents, chunks, source checks, ingestion jobs, embedding checkpoints, revocations, and model health are durable. Publication inserts a complete generation and moves the active pointer in one transaction. Integration tests use an isolated schema and never clear the user's corpus.
+
+## Observability
+
+Structured logs identify request/job/stage outcomes without prompt bodies or document text. Micrometer records HTTP, cache, rejection, inference, research-decision, additional-search, and result metrics. A periodic JSON snapshot is written under the configured local temporary metrics path; see [operations](operations.md). Prompt/model/retrieval changes require unit/contract tests and real-model smoke probes.
