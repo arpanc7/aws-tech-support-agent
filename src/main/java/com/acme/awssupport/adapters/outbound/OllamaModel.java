@@ -8,6 +8,7 @@ import com.acme.awssupport.ports.LocalModel;
 import com.acme.awssupport.ports.TokenCounter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.net.URI;
 import java.net.http.*;
 import java.nio.charset.StandardCharsets;
@@ -21,10 +22,10 @@ import org.springframework.stereotype.Component;
 /**
  * Calls the local Ollama HTTP API using pinned Nomic and Qwen model profiles.
  *
- * <p>Nomic returns embeddings. Qwen returns constrained JSON for evidence selection and a separate
- * coverage check. LangChain4j prompt stages compose policy and evidence; this adapter preserves
- * checked raw prompt formatting, validates response shape/token counts, and never treats arbitrary
- * generated prose as an answer.
+ * <p>Nomic returns embeddings. Qwen returns constrained JSON for a bounded research decision,
+ * grounded answer draft, and separate grounding review. LangChain4j prompt stages compose policy
+ * and evidence; this adapter preserves checked raw prompt formatting and validates response
+ * shape/token counts. Application policy still validates every proposed search and cited ID.
  *
  * <p>A database-backed inference lease coordinates application processes. Persistent health state
  * blocks further inference after uncertain completion until operator recovery. Direct Ollama
@@ -46,7 +47,8 @@ public class OllamaModel implements LocalModel {
   private final TokenCounter tokens;
   private final DatabaseLocks locks;
   private final JdbcTemplate jdbc;
-  private final EvidencePromptChain prompts;
+  private final AgenticPromptChain prompts;
+  private final MeterRegistry metrics;
 
   public OllamaModel(
       RagProperties properties,
@@ -54,13 +56,15 @@ public class OllamaModel implements LocalModel {
       TokenCounter tokens,
       DatabaseLocks locks,
       JdbcTemplate jdbc,
-      EvidencePromptChain prompts) {
+      AgenticPromptChain prompts,
+      MeterRegistry metrics) {
     this.properties = properties;
     this.json = json;
     this.tokens = tokens;
     this.locks = locks;
     this.jdbc = jdbc;
     this.prompts = prompts;
+    this.metrics = metrics;
     URI uri = URI.create(properties.ollamaUrl());
     if (!"http".equals(uri.getScheme())
         || !"127.0.0.1".equals(uri.getHost())
@@ -94,6 +98,17 @@ public class OllamaModel implements LocalModel {
    */
   @Override
   public List<float[]> embed(List<String> inputs, Deadline deadline) {
+    try {
+      List<float[]> output = embedChecked(inputs, deadline);
+      recordModelCall("embedding", "success");
+      return output;
+    } catch (RuntimeException error) {
+      recordModelCall("embedding", "failure");
+      throw error;
+    }
+  }
+
+  private List<float[]> embedChecked(List<String> inputs, Deadline deadline) {
     if (inputs.isEmpty() || inputs.size() > 8)
       throw new IllegalArgumentException("Embedding batches require 1–8 inputs");
     for (String input : inputs)
@@ -136,20 +151,52 @@ public class OllamaModel implements LocalModel {
     }
   }
 
-  /** Runs the LangChain4j selection stage through a deadline-bound guarded model adapter. */
+  /** Runs the bounded research-decision stage through a deadline-bound guarded model adapter. */
   @Override
-  public Selection select(Question question, List<Evidence> evidence, Deadline deadline) {
-    return prompts.select(question, evidence, new GuardedChatModel(deadline));
+  public ResearchDecision decide(Question question, List<Evidence> evidence, Deadline deadline) {
+    try {
+      ResearchDecision result = prompts.decide(question, evidence, new GuardedChatModel(deadline));
+      recordModelCall("research", "success");
+      return result;
+    } catch (RuntimeException error) {
+      recordModelCall("research", "failure");
+      throw error;
+    }
   }
 
-  /** Runs coverage with the same request deadline; no new timeout budget is created. */
+  /** Drafts a cited answer with the same request deadline; no new timeout budget is created. */
   @Override
-  public boolean verify(Question question, List<Evidence> evidence, Deadline deadline) {
-    return prompts.verify(question, evidence, new GuardedChatModel(deadline));
+  public AnswerDraft answer(Question question, List<Evidence> evidence, Deadline deadline) {
+    try {
+      AnswerDraft result = prompts.answer(question, evidence, new GuardedChatModel(deadline));
+      recordModelCall("answer", "success");
+      return result;
+    } catch (RuntimeException error) {
+      recordModelCall("answer", "failure");
+      throw error;
+    }
+  }
+
+  /** Runs the final grounding review with the same request deadline and no repair loop. */
+  @Override
+  public boolean verify(
+      Question question, AnswerDraft draft, List<Evidence> evidence, Deadline deadline) {
+    try {
+      boolean result = prompts.verify(question, draft, evidence, new GuardedChatModel(deadline));
+      recordModelCall("grounding", result ? "success" : "rejected");
+      return result;
+    } catch (RuntimeException error) {
+      recordModelCall("grounding", "failure");
+      throw error;
+    }
+  }
+
+  private void recordModelCall(String operation, String outcome) {
+    metrics.counter("rag.model.calls", "operation", operation, "outcome", outcome).increment();
   }
 
   /**
-   * Request-scoped LangChain4j ChatModel bridge. Supports only our two-message, text-only,
+   * Request-scoped LangChain4j ChatModel bridge. Supports only two-message, text-only,
    * schema-constrained protocol; no provider client defaults, tools, or automatic retries apply.
    */
   private final class GuardedChatModel implements dev.langchain4j.model.chat.ChatModel {
@@ -299,15 +346,18 @@ public class OllamaModel implements LocalModel {
             "Inference timed out. Restart Ollama and reset model health before retrying.");
       }
       if (response.statusCode() != 200) {
-        if (inference && response.statusCode() >= 500) quarantine();
+        if (inference) {
+          if (response.statusCode() >= 500) quarantine();
+          else markHealthy();
+        }
         throw new SupportException(
             "MODEL_UNAVAILABLE", 503, "The local model service could not complete this request.");
       }
+      // A complete HTTP response makes inference completion known even if its body is invalid.
+      if (inference) markHealthy();
       if (response.body().length > 1024 * 1024) throw modelInvalid();
       JsonNode result = json.readTree(new String(response.body(), StandardCharsets.UTF_8));
       if (result == null || !result.isObject()) throw modelInvalid();
-      if (inference)
-        jdbc.update("UPDATE model_health SET healthy=true,reason='' WHERE singleton=true");
       return result;
     } catch (SupportException error) {
       throw error;
@@ -339,6 +389,10 @@ public class OllamaModel implements LocalModel {
   private void quarantine() {
     jdbc.update(
         "UPDATE model_health SET healthy=false,reason='Inference completion uncertain' WHERE singleton=true");
+  }
+
+  private void markHealthy() {
+    jdbc.update("UPDATE model_health SET healthy=true,reason='' WHERE singleton=true");
   }
 
   private static SupportException modelInvalid() {

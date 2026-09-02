@@ -51,7 +51,11 @@ rag:
   max-chunks: 20000
   minimum-similarity: 0.40
   semantic-cache-similarity: 0.94
+  metrics-file: ${RAG_METRICS_FILE:${java.io.tmpdir}/aws-tech-support-agent/metrics.json}
+  metrics-snapshot-interval: ${RAG_METRICS_SNAPSHOT_INTERVAL:30s}
 logging:
+  file:
+    name: ${RAG_LOG_FILE:${java.io.tmpdir}/aws-tech-support-agent/application.log}
   level:
     root: INFO
     com.acme.awssupport: INFO

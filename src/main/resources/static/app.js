@@ -49,7 +49,7 @@ function renderAnswer(data) {
   body.append(element('h2', 'answer-title', data.message));
   if (data.status === 'ANSWERED') {
     for (const claim of data.claims) {
-      body.append(element('blockquote', 'excerpt', claim.text));
+      body.append(element('p', 'excerpt', claim.text));
       for (const id of claim.citationIds) {
         const citation = data.citations.find(c => c.id === id);
         if (!citation) continue;
@@ -61,7 +61,7 @@ function renderAnswer(data) {
     }
     const details = element('details'); details.append(element('summary', '', 'Inspect local evidence & provenance'));
     for (const citation of data.citations) {
-      details.append(element('p', '', `${citation.id} · ${citation.heading}\nFetched ${new Date(citation.fetchedAt).toLocaleString()}\nSpan ${citation.spanId}`));
+      details.append(element('p', '', `${citation.id} · ${citation.heading}\nFetched ${new Date(citation.fetchedAt).toLocaleString()}\nSpan ${citation.spanId}\n\n${citation.quote}`));
     }
     body.append(details);
   } else {

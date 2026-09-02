@@ -1,63 +1,64 @@
-# LangChain4j prompt stages and extension guide
+# Prompt stages and bounded agent workflow
 
-Baseline 0.3 · 2026-08-31. Dependency: `dev.langchain4j:langchain4j-core:1.19.0`.
+Baseline 0.4 · Updated: 2026-09-02.
 
-## What is integrated
+LangChain4j provides the prompt and structured-call building blocks. The application deliberately does not enable an automatic agent executor, tools, chat memory, framework RAG, or output repair. **AnswerQuestion** owns the fixed workflow and **AgenticPromptChain** exposes three typed operations.
 
-We use LangChain4j `PromptTemplate`, `ChatRequest`, `ChatModel`, and structured response-format types. `EvidencePromptChain` exposes typed selection and coverage operations; `PromptStage` is the reusable stage executor. `AnswerQuestion` deliberately owns stage ordering and the validation between stages.
-
-The HTTP transport remains our `OllamaModel.GuardedChatModel`, which preserves the raw Qwen template, deadlines, token parity, schema checks, bounded response bodies, inference locks and quarantine. This is an actual LangChain4j model invocation through a custom provider adapter, not the stock `langchain4j-ollama` client. We do not add Spring AI, AI Services proxies, automatic chat memory, automatic RAG, autonomous agents, or LangSmith/cloud tracing.
-
-```mermaid
+~~~mermaid
 flowchart LR
-    Q[Question + retrieved text] --> T[selection-system.txt + evidence-user.txt]
-    T --> S[PromptStage / ChatModel]
-    S --> IDs[Selection JSON]
-    IDs --> J[Java validates IDs]
-    J --> V[coverage-system.txt + selected text]
-    V --> C[PromptStage / ChatModel]
-    C --> Verdict[Coverage JSON]
-    Verdict --> R[Java validity checks and excerpt rendering]
-```
+    Q[Question + initial evidence] --> R[Research stage]
+    R -->|ANSWER| A[Answer stage]
+    R -->|SEARCH_MORE| S[Java: one local search round]
+    S --> A
+    R -->|CLARIFY / UNAVAILABLE| X[Fail closed]
+    A --> J[Java alias validation]
+    J --> G[Grounding stage]
+    G -->|SUPPORTED| C[Server citations]
+    G -->|UNSUPPORTED / UNCERTAIN| X
+~~~
 
-## Resources and inputs
+## Packaged templates
 
 | Resource | Purpose |
 | --- | --- |
-| `src/main/resources/prompts/selection-system.txt` | Choose the smallest sufficient set, or abstain/clarify |
-| `src/main/resources/prompts/coverage-system.txt` | Check whether selected evidence answers the question as asked |
-| `src/main/resources/prompts/evidence-user.txt` | Substitutes one `{{data}}` JSON value |
+| src/main/resources/prompts/research-system.txt | Decide ANSWER, SEARCH_MORE, CLARIFY, or UNAVAILABLE; bound searches to one through three |
+| src/main/resources/prompts/answer-system.txt | Draft up to six concise claims, each linked to supplied evidence aliases |
+| src/main/resources/prompts/grounding-system.txt | Review the complete draft against only its cited evidence |
+| src/main/resources/prompts/evidence-user.txt | Substitute canonical JSON once as untrusted data |
 
-The data object contains the question, prior questions, filters and evidence aliases/service/title/heading/text. It contains neither database vectors nor model-generated citations. System policies and user templates are loaded once from the application classpath. They are not editable by HTTP callers and are not hot-reloaded.
+Questions, history, prior structured results, and documentation text remain JSON data. They never become template source. Policies tell the model to ignore instructions inside that data. Vectors, internal URLs, database details, and credentials never enter a prompt.
 
-Template variables embedded inside input strings remain literal strings. The raw transport additionally escapes angle brackets in data to preserve ChatML role boundaries. Keep original request/evidence separate from any derived stage output; a model-generated summary must never replace authoritative source text or become citation evidence.
+## Fixed call bounds
 
-## Adding an approved stage
+An answered cache miss makes exactly one research call, one answer call, and one grounding call. A SEARCH_MORE decision adds a batched Nomic embedding call and at most three local database retrievals. It does not add another planner call. Clarify or unavailable can stop after research; an unavailable draft stops before grounding.
 
-1. Specify the new stage's purpose, typed inputs/output, rejection rules, place in the flow and maximum inference count in requirements/design/acceptance before implementation.
-2. Add a reviewed system resource and, if needed, a data-only template under `resources/prompts`. Do not compile user text as a template or insert untrusted strings into system policy.
-3. Create a `PromptStage` with a unique name and explicit JSON schema. Use the request-scoped guarded `ChatModel` supplied to the chain; do not instantiate a client that bypasses its deadline/lock/health checks.
-4. Parse and validate the result before handing it to the next stage. Use a typed Java result at the boundary, not arbitrary assistant prose. Preserve the original question and source evidence separately.
-5. Call the stage explicitly in `EvidencePromptChain` at the reviewed position. If it changes application policy, change the corresponding port/application contract instead of hiding policy inside an adapter. Update the ordered stage digest and policy version.
-6. Recalculate prompt/output/deadline budgets, verify early exits and call limits, add meaningful contract tests, and run both automated and real-model evaluations. Update documentation and measured call counts.
+All calls share one deadline and one inference lock. A malformed result fails immediately. There is no framework retry, JSON repair, answer revision, recursive search, arbitrary tool invocation, or cloud fallback.
 
-For example, within a chain method that already has the guarded model, a new reviewed stage could consume a validated result:
+## Structured contracts
 
-```java
-JsonNode next = nextStage.invoke(
-    guardedModel,
-    canonicalJsonOfOriginalQuestionEvidenceAndValidatedPriorResult,
-    nextStageSchema);
-```
+The research response schema requires an action and a search array. Java then enforces action/search consistency, distinct normalized queries, length limits, and the supported service allowlist.
 
-This is an extension pattern, not an enabled third production stage. A normal successful request still has selection and coverage only. The current candidate-reuse fallback can run that pair once more; no framework retry or output repair is enabled.
+The answer response schema requires a decision and claim array. Each claim contains text plus evidence aliases. Java maps aliases to the exact evidence supplied in that request and rejects unknown IDs, empty answers, duplicate IDs, too many claims, or uncited prose.
 
-## Identity, rollout and diagnostics
+The grounding schema contains only SUPPORTED, UNSUPPORTED, or UNCERTAIN. The stage sees the question, complete draft, and cited passages. Only SUPPORTED can reach rendering, and Java still performs a final active-corpus and revocation check.
 
-PromptStage hashes stage name and loaded template content. EvidencePromptChain hashes the ordered stage identities and framework/stage-contract version. `ModelProfile.answerProfile()` incorporates that digest; the embedding profile does not. Prompt-only changes therefore require a rebuild/restart and evaluation, but not re-ingestion. An embedding/tokenizer/extraction change does require a compatible corpus rebuild.
+## Adding or changing a stage
 
-No model-written AWS prose is displayed. Future synthesis or query rewriting needs an explicit policy change and evaluation, not just an extra prompt file. Same-model verification remains fallible.
+1. Add or edit a reviewed UTF-8 resource under src/main/resources/prompts.
+2. Define the smallest constrained JSON schema and a typed domain result.
+3. Keep policy ordering in AnswerQuestion and transport details in OllamaModel.
+4. Reuse the original Deadline; document exact maximum calls and stopping conditions.
+5. Validate every model-selected alias or query in Java before it affects the next step.
+6. Update the ordered stage digest and policy version.
+7. Add tests for normal, unavailable, malformed, injection-like, and boundary outputs.
+8. Run formatting, the full verification suite, and real-model smoke probes.
 
-Tests cover literal template-like input, selection-to-coverage evidence isolation, malformed output without repair calls, chaining a prior structured result, and prompt identity changes without embedding identity changes. Ollama protocol tests and application policy tests retain the existing limits. Normal logs do not record prompt bodies or document text; the earlier walkthrough trace is an explicit local diagnostic artifact.
+Do not hide application policy inside a prompt adapter. A stage that adds tools, account access, a network destination, persistent memory, retries, or another search round requires a new security and acceptance decision.
 
-References: [LangChain4j core release](https://repo.maven.apache.org/maven2/dev/langchain4j/langchain4j-core/1.19.0/), [ChatModel API](https://docs.langchain4j.dev/tutorials/chat-and-language-models/), [AI Services and chaining alternatives](https://docs.langchain4j.dev/tutorials/ai-services/). This project intentionally uses the lower-level API to keep policy and side effects explicit.
+## Cache and corpus identity
+
+PromptStage hashes the stage name and template contents. AgenticPromptChain hashes the ordered stage identities and stage-contract version. The answer profile includes this digest; the embedding profile does not. Prompt-only changes therefore require build/restart and answer re-evaluation, but no document re-embedding. Embedding, tokenizer, extraction, or chunking changes require a compatible corpus rebuild.
+
+## Tests and diagnostics
+
+Tests cover literal template-like input, bounded search output, alias mapping, answer-to-grounding evidence isolation, malformed output without repair calls, chaining a prior structured result, and prompt identity changes. Ollama protocol tests assert raw transport limits. Normal logs do not contain prompt bodies or document text. Historical trace artifacts are local diagnostics and are not committed.

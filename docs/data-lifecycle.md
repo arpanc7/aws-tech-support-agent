@@ -1,28 +1,28 @@
 # Corpus, preprocessing and refresh
 
-Baseline 0.3 · 2026-08-31. Implements B-02/B-03/B-04/B-09/B-15/B-16/B-17. The pipeline is platform-neutral; [platform setup](platform-setup.md) records the reference machine and pending validation.
+Baseline 0.4 · Updated: 2026-09-02. Implements B-02/B-03/B-04/B-09/B-15/B-16/B-17. The pipeline is platform-neutral; [platform setup](platform-setup.md) records the reference machine and pending validation.
 
 ## Corpus scope
 
-The full seed manifest contains 120 distinct official AWS HTML pages. That count is a chosen demo scope, not a guarantee that every service question is answerable. Add curated sources for demonstrated coverage gaps instead of padding the count.
+The full seed manifest contains 122 distinct official AWS HTML pages. That count is a chosen demo scope, not a guarantee that every service question is answerable. The EC2 and Lambda overview pages were added after basic definition/comparison probes exposed real coverage gaps; add curated sources for demonstrated gaps instead of padding the count.
 
 | Service | Pages | Focus |
 | --- | ---: | --- |
 | IAM | 20 | Policies, roles, trust, access-denied troubleshooting |
 | S3 | 25 | Permissions, ownership, encryption, lifecycle |
-| EC2 | 25 | Connectivity, instance state, keys, EBS |
+| EC2 | 26 | Service overview, connectivity, instance state, keys, EBS |
 | VPC | 20 | Security groups, ACLs, routes, gateways, endpoints |
-| Lambda | 15 | Timeout, concurrency, roles, logs, invocation issues |
+| Lambda | 16 | Service overview, timeout, concurrency, roles, logs, invocation issues |
 | CloudWatch | 15 | Logs, metrics, alarms, permissions |
 
-`config/sources-small.json` retains the earlier 30-page IAM/S3/EC2 slice; `sources-smoke.json` is a minimal fixture manifest. All entries in a chosen manifest are required. The current full snapshot has 1,330 chunks; the configured 20,000-chunk ceiling is not a target. PDF/OCR, arbitrary uploads and recursive crawling remain excluded.
+`config/sources-small.json` retains the earlier 30-page IAM/S3/EC2 slice; `sources-smoke.json` is a minimal fixture manifest. All entries in a chosen manifest are required. The current full snapshot has 1,339 chunks; the configured 20,000-chunk ceiling is not a target. PDF/OCR, arbitrary uploads and recursive crawling remain excluded.
 
 ## Three representations
 
 | Representation | Storage and purpose |
 | --- | --- |
 | Raw source bytes | `data/snapshots/<sha256>.html`, immutable audit/reprocessing input |
-| Canonical evidence | `chunk.content`, structural text copied into citations and answers |
+| Canonical evidence | `chunk.content`, structural text copied exactly into citation quotes and supplied as the sole factual basis for synthesis |
 | Derived retrieval input | `chunk.embedding_input`, 768-dimensional embedding and lexical fields |
 
 Raw snapshots, source metadata and derived text are separate. A citation points to a whole chunk with heading/anchor provenance; there is no independent evidence-span/offset table. This limits excerpt granularity and does not prove that qualifications spanning multiple chunks are retained.
